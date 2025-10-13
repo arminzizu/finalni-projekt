@@ -19,7 +19,10 @@ type ArtiklCijena = {
 // ---- Tip contexta ----
 type CjenovnikContextType = {
   cjenovnik: ArtiklCijena[];
+  pendingCjenovnik: ArtiklCijena[]; // Privremeni cjenovnik za nove artikle
   setCjenovnik: React.Dispatch<React.SetStateAction<ArtiklCijena[]>>;
+  addArtikal: (artikal: ArtiklCijena) => void;
+  updateCjenovnik: () => void; // Potvrda promjena
 };
 
 const CjenovnikContext = createContext<CjenovnikContextType | undefined>(undefined);
@@ -65,13 +68,13 @@ const initialCjenovnik: ArtiklCijena[] = [
 // ---- Provider ----
 export function CjenovnikProvider({ children }: { children: ReactNode }) {
   const [cjenovnik, setCjenovnik] = useState<ArtiklCijena[]>(() => {
-    // Provjeravamo da li smo u pregledaču prije pristupa localStorage
     if (typeof window === "undefined") {
       return initialCjenovnik;
     }
     const savedCjenovnik = localStorage.getItem("cjenovnik");
     return savedCjenovnik ? JSON.parse(savedCjenovnik) : initialCjenovnik;
   });
+  const [pendingCjenovnik, setPendingCjenovnik] = useState<ArtiklCijena[]>([]); // Privremeni cjenovnik
 
   // Spremi cjenovnik u localStorage svaki put kad se promijeni
   useEffect(() => {
@@ -80,9 +83,18 @@ export function CjenovnikProvider({ children }: { children: ReactNode }) {
     }
   }, [cjenovnik]);
 
+  const addArtikal = (artikal: ArtiklCijena) => {
+    setPendingCjenovnik((prev) => [...prev, artikal]); // Dodaj u privremeni cjenovnik
+  };
+
+  const updateCjenovnik = () => {
+    setCjenovnik((prev) => [...prev, ...pendingCjenovnik]); // Potvrdi promjene
+    setPendingCjenovnik([]); // Očisti privremeni cjenovnik
+  };
+
   return (
     <AppNameProvider>
-      <CjenovnikContext.Provider value={{ cjenovnik, setCjenovnik }}>
+      <CjenovnikContext.Provider value={{ cjenovnik, pendingCjenovnik, setCjenovnik, addArtikal, updateCjenovnik }}>
         {children}
       </CjenovnikContext.Provider>
     </AppNameProvider>

@@ -105,6 +105,18 @@ const buttonStyle: React.CSSProperties = {
   gap: "8px",
 };
 
+const updateButtonStyle: React.CSSProperties = {
+  padding: "8px 16px",
+  background: "#15803d", // Zeleno dugme za ažuriranje
+  color: "white",
+  border: "none",
+  borderRadius: "6px",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: 500,
+  marginTop: "10px",
+};
+
 const deleteButtonStyle: React.CSSProperties = {
   padding: "8px",
   background: "none",
@@ -132,7 +144,7 @@ const checkboxStyle: React.CSSProperties = {
 
 // ---- Glavna komponenta ----
 export default function CjenovnikPage() {
-  const { cjenovnik, setCjenovnik } = useCjenovnik();
+  const { cjenovnik, pendingCjenovnik, setCjenovnik, addArtikal, updateCjenovnik } = useCjenovnik();
 
   const [newArtiklNaziv, setNewArtiklNaziv] = useState<string>("");
   const [newArtiklCijena, setNewArtiklCijena] = useState<string>("");
@@ -200,7 +212,11 @@ export default function CjenovnikPage() {
       setError("Unesite valjanu zapreminu flaše za žestoko piće!");
       return;
     }
-    if (cjenovnik.some((artikl) => artikl.naziv.toLowerCase() === newArtiklNaziv.trim().toLowerCase())) {
+    if (
+      [...cjenovnik, ...pendingCjenovnik].some(
+        (artikl) => artikl.naziv.toLowerCase() === newArtiklNaziv.trim().toLowerCase()
+      )
+    ) {
       setError("Artikl s tim nazivom već postoji!");
       return;
     }
@@ -221,7 +237,7 @@ export default function CjenovnikPage() {
         : {}),
     };
 
-    setCjenovnik([...cjenovnik, noviArtikl]);
+    addArtikal(noviArtikl); // Dodaj u privremeni cjenovnik
     setNewArtiklNaziv("");
     setNewArtiklCijena("");
     setNewArtiklNabavnaCijena("");
@@ -236,7 +252,7 @@ export default function CjenovnikPage() {
 
   // ---- Brisanje artikla ----
   const deleteArtikl = (naziv: string) => {
-    setCjenovnik(cjenovnik.filter((artikl) => artikl.naziv !== naziv));
+    setCjenovnik(cjenovnik.filter((artikl) => artikl.naziv !== naziv)); // Ispravljeno korištenje setCjenovnik
   };
 
   return (
@@ -371,6 +387,13 @@ export default function CjenovnikPage() {
             <FaPlus /> Dodaj
           </button>
         </div>
+        <button
+          onClick={updateCjenovnik}
+          style={updateButtonStyle}
+          disabled={pendingCjenovnik.length === 0} // Onemogući ako nema promjena
+        >
+          Ažuriraj cjenovnik
+        </button>
       </div>
 
       {/* Lista artikala */}
@@ -419,6 +442,40 @@ export default function CjenovnikPage() {
             ))}
           </tbody>
         </table>
+      )}
+      {pendingCjenovnik.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 500, color: "#1f2937", marginBottom: "16px" }}>
+            Čekajuće promjene
+          </h2>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Artikal</th>
+                <th style={thStyle}>Prodajna cijena</th>
+                <th style={thStyle}>Nabavna cijena</th>
+                <th style={thStyle}>Početna količina</th>
+                <th style={thStyle}>Žestoko Količina (L)</th>
+                <th style={thStyle}>Proizvodna Cijena</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingCjenovnik.map((artikl) => (
+                <tr key={artikl.naziv}>
+                  <td style={tdStyle}>{artikl.naziv}</td>
+                  <td style={tdStyle}>{artikl.cijena.toFixed(2)}</td>
+                  <td style={tdStyle}>{artikl.nabavnaCijena.toFixed(2)}</td>
+                  <td style={tdStyle}>
+                    {artikl.pocetnoStanje.toFixed(artikl.jeZestoko ? 2 : 0)}
+                    {artikl.jeZestoko ? " L" : " kom"}
+                  </td>
+                  <td style={tdStyle}>{artikl.jeZestoko ? (artikl.zestokoKolicina || 0).toFixed(2) : "-"}</td>
+                  <td style={tdStyle}>{artikl.jeZestoko ? (artikl.proizvodnaCijena || 0).toFixed(2) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
