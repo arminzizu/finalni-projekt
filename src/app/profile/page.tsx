@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { auth, sendPasswordResetEmail } from "../../lib/firebase";
 import { useAppName } from "../context/AppNameContext";
+import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth"; // Dodani importi
 
 const containerStyle: React.CSSProperties = {
   maxWidth: "1200px",
@@ -68,11 +69,45 @@ export default function Profile() {
   const { appName, setAppName } = useAppName();
   const [localAppName, setLocalAppName] = useState(appName); // Lokalni state za input
   const [sessions, setSessions] = useState([
-    { id: "12345", date: "28.09.2025 14:30", status: "Aktivna", device: "Desktop", location: "Sarajevo", name: "Korisnik A" },
-    { id: "67890", date: "27.09.2025 09:15", status: "Završena", device: "Mobilni", location: "Mostar", name: "Admin" },
+    { id: "12345", date: "28.09.2025 14:30", status: "Aktivna", device: "Desktop", location: "Sarajevo", ip: "192.168.1.1", name: "Korisnik A" },
+    { id: "67890", date: "27.09.2025 09:15", status: "Završena", device: "Mobilni", location: "Mostar", ip: "10.0.0.1", name: "Admin" },
   ]);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editedSessionName, setEditedSessionName] = useState("");
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  // Dohvati IP adresu i trenutnog korisnika
+  useEffect(() => {
+    const fetchIP = async () => {
+      try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const data = await response.json();
+        return data.ip;
+      } catch (error) {
+        console.error("Greška pri dohvaćanju IP adrese:", error);
+        return "N/A";
+      }
+    };
+
+    const user = auth.currentUser;
+    if (user) {
+      setEmail(user.email || "N/A"); // Postavi trenutni e-mail
+      fetchIP().then((ip) => {
+        const device = /Mobi|Android/i.test(navigator.userAgent) ? "Mobilni" : "Desktop";
+        const location = navigator.geolocation ? "Lokacija nije dostupna" : "Sarajevo"; // Placeholder
+        const currentSession = {
+          id: Date.now().toString(),
+          date: new Date().toLocaleString("bs-BA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+          status: "Aktivna",
+          device,
+          location,
+          ip,
+          name: user.displayName || "Korisnik",
+        };
+        setSessions((prev) => [currentSession, ...prev.filter(s => s.status !== "Aktivna")]);
+      });
+    }
+  }, []);
 
   const handleResetPassword = async () => {
     try {
@@ -118,7 +153,48 @@ export default function Profile() {
     setEditedSessionName("");
   };
 
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  // 2FA logika
+  const handleEnable2FA = async () => {
+    if (!auth.currentUser?.email) {
+      setMessage("Morate biti prijavljeni da biste omogućili 2FA!");
+      return;
+    }
+    const actionCodeSettings = {
+      url: window.location.href, // Povratni URL nakon verifikacije
+      handleCodeInApp: true,
+    };
+    try {
+      await sendSignInLinkToEmail(auth, auth.currentUser.email, actionCodeSettings);
+      setMessage("Provjerite e-mail za link za verifikaciju 2FA!");
+      window.localStorage.setItem("emailForSignIn", auth.currentUser.email); // Spremi e-mail za verifikaciju
+      setTwoFactorEnabled(true); // Postavi 2FA na omogućeno nakon slanja
+    } catch (err: any) {
+      setMessage("Greška pri omogućavanju 2FA: " + err.message);
+    }
+  };
+
+  const handleVerify2FA = () => {
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = window.localStorage.getItem("emailForSignIn");
+      if (!email) {
+        email = window.prompt("Unesite e-mail za verifikaciju:");
+      }
+      if (email) {
+        signInWithEmailLink(auth, email, window.location.href)
+          .then((result: any) => { // Eksplicitni tip
+            window.localStorage.removeItem("emailForSignIn");
+            setMessage("2FA uspješno verifikovan!");
+          })
+          .catch((err: any) => { // Eksplicitni tip
+            setMessage("Greška pri verifikaciji 2FA: " + err.message);
+          });
+      }
+    }
+  };
+
+  useEffect(() => {
+    handleVerify2FA(); // Provjeri link prilikom učitavanja stranice
+  }, []);
 
   return (
     <div style={containerStyle}>
@@ -188,6 +264,7 @@ export default function Profile() {
               <th style={thStyle}>Status</th>
               <th style={thStyle}>Uređaj</th>
               <th style={thStyle}>Lokacija</th>
+              <th style={thStyle}>IP adresa</th>
               <th style={thStyle}>Ime sesije</th>
               <th style={thStyle}>Akcije</th>
             </tr>
@@ -200,6 +277,7 @@ export default function Profile() {
                 <td style={tdStyle}>{session.status}</td>
                 <td style={tdStyle}>{session.device}</td>
                 <td style={tdStyle}>{session.location}</td>
+                <td style={tdStyle}>{session.ip}</td>
                 <td style={tdStyle}>
                   {editingSessionId === session.id ? (
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -252,7 +330,12 @@ export default function Profile() {
             checked={twoFactorEnabled}
             onChange={(e) => setTwoFactorEnabled(e.target.checked)}
           />
-          <span>Dvofaktorska autentifikacija (2FA) - u razvoju</span>
+          <span>Dvofaktorska autentifikacija (2FA)</span>
+          {twoFactorEnabled && (
+            <button style={buttonStyle} onClick={handleEnable2FA}>
+              Omogući 2FA
+            </button>
+          )}
         </div>
       </div>
 
@@ -264,11 +347,11 @@ export default function Profile() {
           <tbody>
             <tr>
               <td style={tdStyle}>E-mail:</td>
-              <td style={tdStyle}>korisnik@example.com</td>
+              <td style={tdStyle}>{email || "N/A"}</td>
             </tr>
             <tr>
               <td style={tdStyle}>Datum registracije:</td>
-              <td style={tdStyle}>15.09.2025</td>
+              <td style={tdStyle}>{auth.currentUser?.metadata?.creationTime ? new Date(auth.currentUser.metadata.creationTime).toLocaleDateString("bs-BA") : "N/A"}</td>
             </tr>
           </tbody>
         </table>
@@ -278,4 +361,4 @@ export default function Profile() {
       </div>
     </div>
   );
-} 
+}
