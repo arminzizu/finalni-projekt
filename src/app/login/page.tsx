@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 
+
 export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<"email" | "register" | "forgot" | null>(null);
   const [email, setEmail] = useState<string>("");
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const router = useRouter();
+  
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
@@ -32,6 +34,8 @@ export default function LoginPage() {
       const idToken = await user.getIdToken();
       console.log("ID Token generisan:", idToken);
       console.log("Uspješan login:", user.email);
+
+      
 
       const response = await fetch("/api/set-session", {
         method: "POST",
