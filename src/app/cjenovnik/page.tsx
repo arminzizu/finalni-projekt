@@ -268,6 +268,42 @@ export default function CjenovnikPage() {
         .delete-button:hover {
           color: #b91c1c;
         }
+        @media (max-width: 768px) {
+          div[style*='padding: 24px'] {
+            padding: 15px; /* Smanjen padding na mobilu */
+          }
+          h1 {
+            font-size: 20px; /* Smanjen font za naslove */
+          }
+          h2 {
+            font-size: 16px; /* Smanjen font za podnaslove */
+          }
+          div[style*='display: flex'] {
+            flex-direction: column; /* Stack-anje elemenata vertikalno */
+            gap: 10px;
+          }
+          input, select {
+            width: 100%; /* Inputi i select popunjavaju širinu */
+            margin: 5px 0; /* Kompaktniji razmak */
+            font-size: 14px; /* Smanjen font za inpute */
+            min-height: 48px; /* Minimalna visina za touch target */
+          }
+          button {
+            width: 100%;
+            margin: 5px 0; /* Kompaktniji razmak */
+            font-size: 14px; /* Smanjen font za dugmadi */
+            min-height: 48px; /* Minimalna visina za touch target */
+          }
+          table {
+            font-size: 12px; /* Smanjen font za tablice */
+          }
+          th, td {
+            padding: 10px; /* Smanjen padding u tablicama */
+          }
+          div[style*='marginBottom: 20px'] {
+            marginBottom: 15px; /* Smanjen margin za sekcije */
+          }
+        }
       `}</style>
 
       <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#1f2937", marginBottom: "24px" }}>

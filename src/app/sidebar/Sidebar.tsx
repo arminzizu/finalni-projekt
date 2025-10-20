@@ -1,30 +1,26 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { auth, signOut } from "../../lib/firebase";
-import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaSignOutAlt, FaUser, FaBars } from "react-icons/fa";
+import { auth } from "../../lib/firebase";
+import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaUser, FaBars } from "react-icons/fa";
 import { useAppName } from "../context/AppNameContext";
 
-const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Dispatch<React.SetStateAction<boolean>> }) => {
+const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
   const { appName } = useAppName();
+  const [isBottomBarVisible, setIsBottomBarVisible] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      console.log("Uspješna odjava, preusmjeravam na login");
-      await fetch("/api/clear-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      router.push("/login");
-    } catch (err: any) {
-      console.error("Greška pri odjavi:", err);
-    }
-  };
+  useEffect(() => {
+    // Provjera autentifikacije
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setIsAuthenticated(!!user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const navLinks = [
     { href: "/dashboard", label: "Dashboard", icon: <FaTachometerAlt /> },
@@ -32,58 +28,30 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
     { href: "/arhiva", label: "Arhiva", icon: <FaArchive /> },
     { href: "/cjenovnik", label: "Cjenovnik", icon: <FaTags /> },
     { href: "/profit", label: "Profit", icon: <FaDollarSign /> },
+    { href: "/profile", label: "Profil", icon: <FaUser /> }, // Dodan ispravan link za profil
   ];
 
   return (
-    <aside
-      style={{
-        width: isOpen ? "220px" : "60px",
-        backgroundColor: "#1E1E2F",
-        color: "#fff",
-        padding: "20px 0",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        alignItems: isOpen ? "flex-start" : "center",
-        boxShadow: "2px 0 8px rgba(0,0,0,0.15)",
-        transition: "width 0.3s ease, padding 0.3s ease",
-        position: isOpen ? "fixed" : "absolute", // Fiksiran samo kad je otvoren
-        height: "100vh",
-        top: 0,
-        left: 0,
-        zIndex: 1000, // Osiguraj da je iznad sadržaja
-        overflowY: "auto",
-        transform: isOpen ? "translateX(0)" : "translateX(-100%)", // Preklapanje na mobilu
-        visibility: isOpen ? "visible" : "hidden", // Sakrij kad je zatvoren
-      }}
-    >
-      <div>
-        <div
-          onClick={() => setIsOpen(!isOpen)}
+    <>
+      {isAuthenticated && isBottomBarVisible && (
+        <nav
           style={{
-            cursor: "pointer",
-            marginBottom: "30px",
-            padding: "6px 10px",
-            borderRadius: "4px",
-            backgroundColor: "#2A2A3F",
-            textAlign: "center",
-            fontWeight: 600,
-            fontSize: "16px",
+            backgroundColor: "#1E1E2F",
             color: "#fff",
-            userSelect: "none",
+            padding: "10px 0",
             display: "flex",
-            justifyContent: "center",
+            justifyContent: "space-around",
             alignItems: "center",
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            width: "100%",
+            zIndex: 1000,
+            boxShadow: "0 -2px 8px rgba(0,0,0,0.15)",
+            height: "60px",
+            transition: "transform 0.3s ease",
           }}
         >
-          <FaBars /> {/* Hamburger ikona */}
-        </div>
-        {isOpen && (
-          <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "30px", paddingLeft: "10px" }}>
-            {appName}
-          </h2>
-        )}
-        <nav style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
@@ -92,113 +60,83 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
                 href={link.href}
                 style={{
                   display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  gap: "12px",
-                  padding: "10px 15px",
+                  gap: "2px",
+                  padding: "5px",
                   borderRadius: "8px",
                   background: isActive ? "#3b82f6" : "transparent",
                   color: "#fff",
                   textDecoration: "none",
                   fontWeight: 500,
                   transition: "all 0.2s ease",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  width: "100%",
+                  fontSize: "12px",
+                  width: "16%", // Ravnomjerno raspoređeno za 6 linkova
+                  textAlign: "center",
                 }}
                 className="sidebar-link"
               >
                 {link.icon}
-                {isOpen && <span style={{ paddingLeft: "10px" }}>{link.label}</span>}
+                <span>{link.label}</span>
               </Link>
             );
           })}
         </nav>
-      </div>
-      <div style={{ paddingBottom: "20px", width: "100%" }}>
-        <Link
-          href="/profile"
+      )}
+      {isAuthenticated && (
+        <div
           style={{
+            position: "fixed",
+            bottom: "60px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1001,
             display: "flex",
             alignItems: "center",
-            gap: "12px",
-            padding: "10px 15px",
-            borderRadius: "8px",
-            background: pathname === "/profile" ? "#3b82f6" : "transparent",
-            color: "#fff",
-            textDecoration: "none",
-            fontWeight: 500,
-            transition: "all 0.2s ease",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            width: "100%",
-            textAlign: isOpen ? "left" : "center",
-            marginBottom: "12px",
-          }}
-          className="sidebar-link"
-        >
-          <FaUser />
-          {isOpen && <span style={{ paddingLeft: "10px" }}>Profil</span>}
-        </Link>
-        <button
-          onClick={handleLogout}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            padding: "10px 15px",
-            borderRadius: "8px",
-            background: "transparent",
-            color: "#fff",
-            textDecoration: "none",
-            fontWeight: 500,
-            transition: "all 0.2s ease",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            border: "none",
+            justifyContent: "center",
+            width: "40px",
+            height: "40px",
+            backgroundColor: "#2A2A3F",
+            borderRadius: "50%",
             cursor: "pointer",
-            width: "100%",
-            textAlign: isOpen ? "left" : "center",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+            transition: "transform 0.3s ease",
           }}
-          className="sidebar-link"
+          onClick={() => setIsBottomBarVisible(!isBottomBarVisible)}
         >
-          <FaSignOutAlt />
-          {isOpen && <span style={{ paddingLeft: "10px" }}>Odjava</span>}
-        </button>
-      </div>
+          <FaBars style={{ color: "#fff", fontSize: "18px" }} />
+        </div>
+      )}
       <style jsx>{`
         .sidebar-link:hover {
           background-color: #3b82f6;
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
         @media (max-width: 768px) {
-          aside {
-            width: 60px !important; /* Fiksna širina kad je zatvoren */
-            transform: translateX(-100%) !important; /* Sakrij po defaultu */
-            visibility: hidden !important;
+          nav {
+            height: 60px; /* Fiksna visina na mobilu */
           }
-          aside[style*="transform: translateX(0)"] {
-            transform: translateX(0) !important; /* Prikazivanje kad se otvori */
-            visibility: visible !important;
-            width: 220px !important; /* Širina kad je otvoren */
+          .sidebar-link span {
+            font-size: 10px; /* Smanji tekst na mobilu */
+          }
+          .sidebar-link {
+            width: "16%"; /* Prilagođeno za 6 elemenata */
           }
           div[onClick] {
-            display: flex !important; /* Osiguraj vidljivost hamburgera */
+            bottom: ${isBottomBarVisible ? "60px" : "10px"}; /* Pomicanje ikone kad je bar sakriven */
+            transform: ${isBottomBarVisible ? "translateX(-50%)" : "translateX(-50%) rotate(90deg)"};
           }
+        }
+        @media (min-width: 768px) {
           nav {
-            display: none; /* Sakrij linkove po defaultu na mobilu */
+            height: 60px; /* Fiksna visina na desktopu */
           }
-          nav[style*="display: flex"] {
-            display: flex !important; /* Prikazivanje linkova kad je otvoren */
-          }
-          h2 {
-            display: none; /* Sakrij naslov na mobilu */
+          .sidebar-link span {
+            font-size: 12px; /* Normalni tekst na desktopu */
           }
         }
       `}</style>
-    </aside>
+    </>
   );
 };
 

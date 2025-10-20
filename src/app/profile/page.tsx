@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { auth, sendPasswordResetEmail } from "../../lib/firebase";
+import { auth, sendPasswordResetEmail, signOut } from "../../lib/firebase";
 import { useAppName } from "../context/AppNameContext";
-import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth"; // Dodani importi
+import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
+import { useRouter } from "next/navigation"; // Dodan import za useRouter
 
 const containerStyle: React.CSSProperties = {
   maxWidth: "1200px",
@@ -75,6 +76,7 @@ export default function Profile() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editedSessionName, setEditedSessionName] = useState("");
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const router = useRouter(); // Inicijalizacija routera
 
   // Dohvati IP adresu i trenutnog korisnika
   useEffect(() => {
@@ -181,11 +183,11 @@ export default function Profile() {
       }
       if (email) {
         signInWithEmailLink(auth, email, window.location.href)
-          .then((result: any) => { // Eksplicitni tip
+          .then((result: any) => {
             window.localStorage.removeItem("emailForSignIn");
             setMessage("2FA uspješno verifikovan!");
           })
-          .catch((err: any) => { // Eksplicitni tip
+          .catch((err: any) => {
             setMessage("Greška pri verifikaciji 2FA: " + err.message);
           });
       }
@@ -195,6 +197,20 @@ export default function Profile() {
   useEffect(() => {
     handleVerify2FA(); // Provjeri link prilikom učitavanja stranice
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      console.log("Uspješna odjava, preusmjeravam na login");
+      await fetch("/api/clear-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      router.push("/login");
+    } catch (err: any) {
+      console.error("Greška pri odjavi:", err);
+    }
+  };
 
   return (
     <div style={containerStyle}>
@@ -357,6 +373,17 @@ export default function Profile() {
         </table>
         <button style={buttonStyle} className="mt-4">
           Uredi detalje
+        </button>
+        <button
+          onClick={handleLogout}
+          style={{
+            ...buttonStyle,
+            background: "#dc2626",
+            marginTop: "20px",
+            width: "100%",
+          }}
+        >
+          Odjava
         </button>
       </div>
     </div>
