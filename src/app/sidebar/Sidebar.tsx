@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { auth, signOut } from "../../lib/firebase";
-import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaSignOutAlt, FaUser } from "react-icons/fa";
+import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaSignOutAlt, FaUser, FaBars } from "react-icons/fa";
 import { useAppName } from "../context/AppNameContext";
 
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Dispatch<React.SetStateAction<boolean>> }) => {
@@ -47,11 +47,14 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
         alignItems: isOpen ? "flex-start" : "center",
         boxShadow: "2px 0 8px rgba(0,0,0,0.15)",
         transition: "width 0.3s ease, padding 0.3s ease",
-        position: "fixed" as "fixed",
+        position: isOpen ? "fixed" : "absolute", // Fiksiran samo kad je otvoren
         height: "100vh",
         top: 0,
         left: 0,
+        zIndex: 1000, // Osiguraj da je iznad sadržaja
         overflowY: "auto",
+        transform: isOpen ? "translateX(0)" : "translateX(-100%)", // Preklapanje na mobilu
+        visibility: isOpen ? "visible" : "hidden", // Sakrij kad je zatvoren
       }}
     >
       <div>
@@ -68,9 +71,12 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
             fontSize: "16px",
             color: "#fff",
             userSelect: "none",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
-          {isOpen ? "<" : ">"}
+          <FaBars /> {/* Hamburger ikona */}
         </div>
         {isOpen && (
           <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "30px", paddingLeft: "10px" }}>
@@ -98,6 +104,7 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
+                  width: "100%",
                 }}
                 className="sidebar-link"
               >
@@ -161,6 +168,36 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: React.Disp
           {isOpen && <span style={{ paddingLeft: "10px" }}>Odjava</span>}
         </button>
       </div>
+      <style jsx>{`
+        .sidebar-link:hover {
+          background-color: #3b82f6;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+          aside {
+            width: 60px !important; /* Fiksna širina kad je zatvoren */
+            transform: translateX(-100%) !important; /* Sakrij po defaultu */
+            visibility: hidden !important;
+          }
+          aside[style*="transform: translateX(0)"] {
+            transform: translateX(0) !important; /* Prikazivanje kad se otvori */
+            visibility: visible !important;
+            width: 220px !important; /* Širina kad je otvoren */
+          }
+          div[onClick] {
+            display: flex !important; /* Osiguraj vidljivost hamburgera */
+          }
+          nav {
+            display: none; /* Sakrij linkove po defaultu na mobilu */
+          }
+          nav[style*="display: flex"] {
+            display: flex !important; /* Prikazivanje linkova kad je otvoren */
+          }
+          h2 {
+            display: none; /* Sakrij naslov na mobilu */
+          }
+        }
+      `}</style>
     </aside>
   );
 };
