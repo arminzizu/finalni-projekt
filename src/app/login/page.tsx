@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 
-
 export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<"email" | "register" | "forgot" | null>(null);
   const [email, setEmail] = useState<string>("");
@@ -14,7 +13,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const router = useRouter();
-  
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
@@ -34,8 +32,6 @@ export default function LoginPage() {
       const idToken = await user.getIdToken();
       console.log("ID Token generisan:", idToken);
       console.log("Uspješan login:", user.email);
-
-      
 
       const response = await fetch("/api/set-session", {
         method: "POST",
@@ -167,7 +163,8 @@ export default function LoginPage() {
         boxShadow: "0 2px 10px rgba(0, 0, 0, 0.1)", 
         textAlign: "center", 
         maxWidth: "400px", 
-        width: "90%"
+        width: "90%", // Prilagođeno za mobilne uređaje
+        height: "auto", // Dinamična visina za mobilne uređaje
       }}>
         <style jsx>{`
           @media (max-width: 768px) {
@@ -176,6 +173,7 @@ export default function LoginPage() {
             }
             div[style*='padding: 20px'] {
               padding: 15px; /* Smanjen padding na mobilu */
+              width: 90%; /* Osigurava fleksibilnost na malim ekranima */
             }
             input, button {
               width: 100%;
@@ -183,9 +181,21 @@ export default function LoginPage() {
               padding: 10px;
               font-size: 14px; /* Smanjen font za inpute i dugmadi */
               min-height: 48px; /* Minimalna visina za touch target */
+              box-sizing: border-box; /* Osigurava da padding ne povećava širinu */
             }
             button {
               margin-bottom: 5px; /* Manji razmak između dugmadi */
+            }
+            div[style*='color: red'] {
+              font-size: 14px; /* Smanjen font za greške */
+              padding: 8px;
+            }
+            div[style*='color: green'] {
+              font-size: 14px; /* Smanjen font za poruke */
+              padding: 8px;
+            }
+            button[style*='marginTop: 10px'] {
+              margin-top: 5px; /* Smanjen razmak za dugmad "Nazad" */
             }
           }
         `}</style>
