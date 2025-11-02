@@ -14,6 +14,8 @@ import {
 import { FaArrowUp, FaArrowDown, FaDollarSign } from "react-icons/fa";
 import { auth, onAuthStateChanged } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
+import { getDocs, collection, onSnapshot } from "firebase/firestore";
+import { db } from "../../lib/firestore"; // NOVO
 
 // Tipovi preuzeti iz ObracunPage
 type ArhiviraniArtikal = {
@@ -79,47 +81,86 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Autentikacija
+  // Autentikacija + Firestore real-time učitavanje
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        console.log("Korisnik nije prijavljen, preusmjeravam na login");
-        router.push("/login");
-      } else {
-        console.log("Korisnik prijavljen:", user.uid);
+        console.log("Nema prijavljenog korisnika");
+        setArhiva([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log("Korisnik prijavljen:", user.uid);
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Učitaj sve obračune iz Firestore-a
+        const querySnapshot = await getDocs(collection(db, "users", user.uid, "obracuni"));
+        const podaci: ArhiviraniObracun[] = [];
+
+        querySnapshot.forEach((doc) => {
+          podaci.push(doc.data() as ArhiviraniObracun);
+        });
+
+        // Sortiraj po datumu
+        podaci.sort((a, b) => {
+          const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+          const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+          return dateA - dateB;
+        });
+
+        console.log("Učitano iz Firestore-a:", podaci);
+        setArhiva(podaci);
+      } catch (error) {
+        console.error("Greška pri učitavanju iz Firestore-a:", error);
+        setError("Ne mogu učitati podatke. Provjeri internet vezu.");
+      } finally {
         setLoading(false);
       }
-    }, (err) => {
-      console.error("Greška pri provjeri autentikacije:", err);
-      setError("Greška pri provjeri autentikacije. Pokušaj ponovo.");
-      setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [router]);
+    // Real-time listener
+    let unsubscribeFirestore: (() => void) | null = null;
 
-  // Učitavanje podataka iz localStorage
-  useEffect(() => {
-    const savedArhiva = localStorage.getItem("arhivaObracuna");
-    if (savedArhiva) {
-      const parsedArhiva = JSON.parse(savedArhiva);
-      console.log("Učitani podaci iz arhivaObracuna:", parsedArhiva); // Logiranje podataka
-      setArhiva(parsedArhiva);
-    } else {
-      console.warn("Nema podataka u arhivaObracuna");
-      setArhiva([]);
-    }
-    const handler = () => {
-      const updatedArhiva = localStorage.getItem("arhivaObracuna");
-      if (updatedArhiva) {
-        const parsedUpdated = JSON.parse(updatedArhiva);
-        console.log("Ažurirani podaci iz arhivaObracuna:", parsedUpdated);
-        setArhiva(parsedUpdated);
-      }
+    const setupRealtimeListener = () => {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const q = collection(db, "users", user.uid, "obracuni");
+      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+        const podaci: ArhiviraniObracun[] = [];
+        snapshot.forEach((doc) => {
+          podaci.push(doc.data() as ArhiviraniObracun);
+        });
+
+        podaci.sort((a, b) => {
+          const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+          const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+          return dateA - dateB;
+        });
+
+        setArhiva(podaci);
+        console.log("Real-time ažuriranje iz Firestore-a");
+      }, (error) => {
+        console.error("Greška u real-time listeneru:", error);
+      });
     };
-    window.addEventListener("arhivaChanged", handler);
-    return () => window.removeEventListener("arhivaChanged", handler);
-  }, []);
+
+    const unsubscribeAuthWithListener = onAuthStateChanged(auth, (user) => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      if (user) {
+        setupRealtimeListener();
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeAuthWithListener();
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
+  }, [router]);
 
   // Priprema podataka za grafikon
   const obracuni: Obracun[] = arhiva
@@ -269,13 +310,11 @@ export default function DashboardPage() {
     }));
   };
 
-  // Podaci za prvi grafikon (svi artikli)
+  // Podaci za grafikon
   const chartData = aggregateData(obracuni, range);
-
-  // Podaci za drugi grafikon (odabrani artikal)
   const selectedData = selectedArtikl ? aggregateArtiklData(selectedArtikl, artiklRange) : [];
 
-  // Ukupne vrijednosti za kartice
+  // Ukupne vrijednosti
   const totalBruto = chartData.reduce((sum, o) => sum + Number(o.artikli), 0);
   const totalRashod = chartData.reduce((sum, o) => sum + Number(o.rashod), 0);
   const totalNeto = chartData.reduce((sum, o) => sum + Number(o.neto), 0);
@@ -307,7 +346,7 @@ export default function DashboardPage() {
                 <span style={{ color: p.color, fontWeight: 500 }}>{p.name}: </span>
                 {p.value.toFixed(2)}{unit}{" "}
                 <span style={{ color, fontSize: 12 }}>
-                  {Number(percent) >= 0 ? "▲" : "▼"} {Math.abs(Number(percent))}%
+                  {Number(percent) >= 0 ? "Up" : "Down"} {Math.abs(Number(percent))}%
                 </span>
               </div>
             );
@@ -319,11 +358,11 @@ export default function DashboardPage() {
   };
 
   if (loading) {
-    return <div style={{ textAlign: "center", padding: 10 }}>Učitavanje...</div>;
+    return <div style={{ textAlign: "center", padding: 20 }}>Učitavanje podataka...</div>;
   }
 
   if (error) {
-    return <div style={{ textAlign: "center", padding: 10, color: "red" }}>{error}</div>;
+    return <div style={{ textAlign: "center", padding: 20, color: "red" }}>{error}</div>;
   }
 
   return (
@@ -334,44 +373,20 @@ export default function DashboardPage() {
           box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
         }
         @media (max-width: 768px) {
-          div[style*='padding: 30px'] {
-            padding: 15px; /* Smanjen padding na mobilu */
-          }
-          h1 {
-            font-size: 20px; /* Smanjen font za naslove */
-          }
-          div[style*='display: flex'] {
-            flex-direction: column; /* Stack-anje elemenata vertikalno */
-            gap: 10px;
-          }
-          div[style*='min-width: 160px'] {
-            min-width: 100%; /* Kartice pune širinu na mobilu */
-          }
-          button {
-            width: 100%;
-            margin: 5px 0; /* Kompaktniji razmak */
-            padding: 8px;
-            font-size: 14px; /* Smanjen font za dugmadi */
-            min-height: 48px; /* Minimalna visina za touch target */
-          }
-          input[type="date"] {
-            width: 100%;
-            margin: 5px 0; /* Kompaktniji razmak */
-            padding: 6px;
-            font-size: 14px; /* Smanjen font za inpute */
-          }
-          div[style*='width: 100%, height: 400'] {
-            height: 300px; /* Smanjena visina grafika na mobilu */
-          }
-          div[style*='width: 100%, height: 300'] {
-            height: 200px; /* Smanjena visina grafika za artikal na mobilu */
-          }
+          div[style*='padding: 30px'] { padding: 15px; }
+          h1 { font-size: 20px; }
+          div[style*='display: flex'] { flex-direction: column; gap: 10px; }
+          div[style*='min-width: 160px'] { min-width: 100%; }
+          button { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; min-height: 48px; }
+          input[type="date"] { width: 100%; margin: 5px 0; padding: 6px; font-size: 14px; }
+          div[style*='height: 400'] { height: 300px; }
+          div[style*='height: 300'] { height: 200px; }
         }
       `}</style>
 
       <h1 style={{ marginBottom: 30, fontSize: 28, fontWeight: 700, color: "#111827" }}>Dashboard</h1>
 
-      {/* Range i custom date picker za prvi grafikon */}
+      {/* Range za prvi grafikon */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 30, alignItems: "center" }}>
         {[
           { value: "currentWeek", label: "Trenutna sedmica" },
@@ -444,7 +459,7 @@ export default function DashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Kartice sa ukupnim zaradama */}
+      {/* Kartice */}
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 30 }}>
         {[
           {
@@ -489,7 +504,7 @@ export default function DashboardPage() {
               <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{item.value.toFixed(2)} KM</div>
               {item.growth && (
                 <div style={{ fontSize: 13, color: Number(item.growth) >= 0 ? "#16a34a" : "#dc2626", marginTop: 2 }}>
-                  {Number(item.growth) >= 0 ? "▲" : "▼"} {Math.abs(Number(item.growth))}%
+                  {Number(item.growth) >= 0 ? "Up" : "Down"} {Math.abs(Number(item.growth))}%
                 </div>
               )}
             </div>
@@ -497,7 +512,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Select artikla i range za drugi grafikon */}
+      {/* Artikal grafikon */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
           <label style={{ marginRight: 10, fontWeight: 500 }}>Odaberi artikal:</label>
@@ -508,14 +523,11 @@ export default function DashboardPage() {
           >
             <option value="">Odaberi artikal</option>
             {allArtikli.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
+              <option key={a} value={a}>{a}</option>
             ))}
           </select>
         </div>
 
-        {/* Range za grafikon artikla */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           {[
             { value: "currentWeek", label: "Trenutna sedmica" },
@@ -563,7 +575,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Grafikon odabranog artikla */}
       {selectedArtikl && (
         <div
           style={{
@@ -594,13 +605,6 @@ export default function DashboardPage() {
           Ukupno prodano: {totalArtikl.toFixed(2)} ({selectedArtikl})
         </div>
       )}
-
-      <style jsx>{`
-        .dashboard-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-        }
-      `}</style>
     </div>
   );
 }
