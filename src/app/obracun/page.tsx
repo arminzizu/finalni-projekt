@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useCjenovnik } from "../context/CjenovnikContext";
+import { auth } from "../../lib/firebase";
+import { db, doc, setDoc, serverTimestamp } from "../../lib/firestore"; // NOVO
 
 // ---- Tipovi ----
 type Artikal = {
@@ -352,14 +354,22 @@ export default function ObracunPage() {
     setEditPrihod({ naziv: "", cijena: 0 });
   };
 
-  const handleSaveObracun = () => {
+  // NOVO: Čuvanje u Firestore
+  const handleSaveObracun = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert("Moraš biti prijavljen da sačuvaš obračun!");
+      return;
+    }
+
     const ukupnoArtikli = artikli.reduce((sum, a) => sum + a.vrijednostKM, 0);
     const ukupnoRashod = rashodi.reduce((sum, r) => sum + r.cijena, 0);
     const ukupnoPrihod = prihodi.reduce((sum, p) => sum + p.cijena, 0);
     const neto = ukupnoArtikli + ukupnoPrihod - ukupnoRashod;
+    const datumString = formatirajDatum(trenutniDatum);
 
     const arhiviraniObracun: ArhiviraniObracun = {
-      datum: formatirajDatum(trenutniDatum),
+      datum: datumString,
       ukupnoArtikli,
       ukupnoRashod,
       ukupnoPrihod,
@@ -380,73 +390,83 @@ export default function ObracunPage() {
       prihodi,
     };
 
-    // Spremanje obračuna u arhivu
-    if (typeof window !== "undefined") {
-      const savedArhiva = localStorage.getItem("arhivaObracuna");
-      const currentArhiva: ArhiviraniObracun[] = savedArhiva ? JSON.parse(savedArhiva) : [];
-      const updatedArhiva = [arhiviraniObracun, ...currentArhiva];
-      localStorage.setItem("arhivaObracuna", JSON.stringify(updatedArhiva));
-    }
+    try {
+      // ČUVANJE U FIRESTORE
+      const docRef = doc(db, "users", user.uid, "obracuni", datumString);
+      await setDoc(docRef, {
+        ...arhiviraniObracun,
+        savedAt: serverTimestamp(),
+      });
 
-    // Ažuriranje cjenovnika u kontekstu
-    setCjenovnik((prev) =>
-      prev.map((item) => {
-        const artikal = artikli.find((a) => a.naziv === item.naziv);
-        if (!artikal) return item;
-        const novoPocetnoStanje = artikal.naziv.toLowerCase().includes("kafa")
-          ? 0
-          : artikal.isKrajnjeSet
-          ? artikal.krajnjeStanje
-          : artikal.ukupno;
-        return {
-          ...item,
-          pocetnoStanje: novoPocetnoStanje,
-        };
-      })
-    );
+      console.log("Obracun sačuvan u Firestore:", datumString);
 
-    // Povećaj datum za jedan dan
-    const noviDatum = new Date(trenutniDatum);
-    noviDatum.setDate(noviDatum.getDate() + 1);
-    setTrenutniDatum(noviDatum);
-
-    // Resetiranje artikala za sljedeći dan
-    setArtikli((prev) =>
-      prev.map((a) => {
-        if (a.naziv.toLowerCase().includes("kafa")) {
+      // Ažuriranje cjenovnika (početno stanje za sljedeći dan)
+      setCjenovnik((prev) =>
+        prev.map((item) => {
+          const artikal = artikli.find((a) => a.naziv === item.naziv);
+          if (!artikal) return item;
+          const novoPocetnoStanje = artikal.naziv.toLowerCase().includes("kafa")
+            ? 0
+            : artikal.isKrajnjeSet
+            ? artikal.krajnjeStanje
+            : artikal.ukupno;
           return {
-            ...a,
-            pocetnoStanje: 0,
-            ulaz: 0,
-            ukupno: 0,
-            utroseno: 0,
-            krajnjeStanje: 0,
-            vrijednostKM: 0,
-            isKrajnjeSet: false,
-          };
-        } else {
-          const novoPocetnoStanje = a.isKrajnjeSet ? a.krajnjeStanje : a.ukupno;
-          return {
-            ...a,
+            ...item,
             pocetnoStanje: novoPocetnoStanje,
-            ulaz: 0,
-            ukupno: novoPocetnoStanje,
-            utroseno: 0,
-            krajnjeStanje: 0,
-            vrijednostKM: 0,
-            isKrajnjeSet: false,
           };
-        }
-      })
-    );
+        })
+      );
 
-    // Resetiranje rashoda i prihoda
-    setRashodi([]);
-    setPrihodi([]);
-    setNewRashod({ naziv: "", cijena: 0 });
-    setNewPrihod({ naziv: "", cijena: 0 });
-    setEditRashodIndex(null);
-    setEditPrihodIndex(null);
+      // Povećaj datum za jedan dan
+      const noviDatum = new Date(trenutniDatum);
+      noviDatum.setDate(noviDatum.getDate() + 1);
+      setTrenutniDatum(noviDatum);
+
+      // Resetiraj formu
+      setArtikli((prev) =>
+        prev.map((a) => {
+          if (a.naziv.toLowerCase().includes("kafa")) {
+            return {
+              ...a,
+              pocetnoStanje: 0,
+              ulaz: 0,
+              ukupno: 0,
+              utroseno: 0,
+              krajnjeStanje: 0,
+              vrijednostKM: 0,
+              isKrajnjeSet: false,
+            };
+          } else {
+            const novoPocetnoStanje = a.isKrajnjeSet ? a.krajnjeStanje : a.ukupno;
+            return {
+              ...a,
+              pocetnoStanje: novoPocetnoStanje,
+              ulaz: 0,
+              ukupno: novoPocetnoStanje,
+              utroseno: 0,
+              krajnjeStanje: 0,
+              vrijednostKM: 0,
+              isKrajnjeSet: false,
+            };
+          }
+        })
+      );
+
+      setRashodi([]);
+      setPrihodi([]);
+      setNewRashod({ naziv: "", cijena: 0 });
+      setNewPrihod({ naziv: "", cijena: 0 });
+      setEditRashodIndex(null);
+      setEditPrihodIndex(null);
+
+      // Emituj događaj (ako koristiš fallback)
+      window.dispatchEvent(new Event("arhivaChanged"));
+
+      alert("Obracun uspješno sačuvan!");
+    } catch (error) {
+      console.error("Greška pri čuvanju u Firestore:", error);
+      alert("Greška pri čuvanju. Provjeri internet vezu.");
+    }
   };
 
   const ukupnoRashod = rashodi.reduce((sum, r) => sum + r.cijena, 0);
@@ -484,89 +504,22 @@ export default function ObracunPage() {
           color: #b91c1c;
         }
         @media (max-width: 768px) {
-          /* Responsive container */
-          div[style*="maxWidth: 1200px"] {
-            padding: 8px;
-          }
-          /* Artikli table - switch to card layout */
-          table:first-of-type {
-            display: flex;
-            flex-direction: column;
-            overflow: visible;
-          }
-          table:first-of-type thead {
-            display: none;
-          }
-          table:first-of-type tbody {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-          }
-          table:first-of-type tr {
-            display: flex;
-            flex-direction: column;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 12px;
-          }
-          table:first-of-type td {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: none;
-            font-size: 13px;
-          }
-          table:first-of-type td:before {
-            content: attr(data-label);
-            font-weight: 600;
-            color: #1f2937;
-            width: 50%;
-          }
-          table:first-of-type td input {
-            max-width: 100%;
-            width: 100%;
-          }
-          /* Rashodi and Prihodi tables */
-          table:not(:first-of-type) {
-            overflow-x: auto;
-          }
-          table:not(:first-of-type) th,
-          table:not(:first-of-type) td {
-            min-width: 120px;
-            font-size: 13px;
-            padding: 8px;
-          }
-          /* Inputs and buttons */
-          input, button {
-            width: 100%;
-            max-width: 100%;
-            margin-bottom: 8px;
-            font-size: 13px;
-          }
-          input[type="date"] {
-            max-width: 100%;
-          }
-          /* Flex layouts for forms */
-          div[style*="display: flex"] {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 8px;
-          }
-          /* Headings and text */
-          h1 {
-            font-size: 20px;
-            margin-bottom: 16px;
-          }
-          h2 {
-            font-size: 16px;
-            margin-bottom: 12px;
-          }
-          h3 {
-            font-size: 14px;
-            margin: 6px 0;
-          }
+          div[style*="maxWidth: 1200px"] { padding: 8px; }
+          table:first-of-type { display: flex; flex-direction: column; }
+          table:first-of-type thead { display: none; }
+          table:first-of-type tbody { display: flex; flex-direction: column; gap: 16px; }
+          table:first-of-type tr { display: flex; flex-direction: column; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); padding: 12px; }
+          table:first-of-type td { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: none; font-size: 13px; }
+          table:first-of-type td:before { content: attr(data-label); font-weight: 600; color: #1f2937; width: 50%; }
+          table:first-of-type td input { max-width: 100%; width: 100%; }
+          table:not(:first-of-type) { overflow-x: auto; }
+          table:not(:first-of-type) th, table:not(:first-of-type) td { min-width: 120px; font-size: 13px; padding: 8px; }
+          input, button { width: 100%; max-width: 100%; margin-bottom: 8px; font-size: 13px; }
+          input[type="date"] { max-width: 100%; }
+          div[style*="display: flex"] { flex-direction: column; align-items: stretch; gap: 8px; }
+          h1 { font-size: 20px; margin-bottom: 16px; }
+          h2 { font-size: 16px; margin-bottom: 12px; }
+          h3 { font-size: 14px; margin: 6px 0; }
         }
       `}</style>
 
