@@ -1,6 +1,6 @@
 // lib/firestore.js
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, setDoc, serverTimestamp, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,6 +12,5 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-export { db, collection, doc, setDoc, getDoc, updateDoc, serverTimestamp };
+export const db = getFirestore(app);
+export { doc, setDoc, serverTimestamp, collection, getDocs, onSnapshot };
