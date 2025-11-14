@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -15,7 +15,9 @@ import { FaArrowUp, FaArrowDown, FaDollarSign } from "react-icons/fa";
 import { auth, onAuthStateChanged } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 import { getDocs, collection, onSnapshot } from "firebase/firestore";
-import { db } from "../../lib/firestore"; // NOVO
+import { db } from "../../lib/firestore";
+import { useCjenovnik } from "../context/CjenovnikContext";
+import { useAppName } from "../context/AppNameContext";
 
 // Tipovi preuzeti iz ObracunPage
 type ArhiviraniArtikal = {
@@ -40,10 +42,13 @@ type ArhiviraniObracun = {
   datum: string;
   ukupnoArtikli: number;
   ukupnoRashod: number;
+  ukupnoPrihod?: number;
   neto: number;
   artikli: ArhiviraniArtikal[];
   rashodi: Rashod[];
-  prihodi: Rashod[];
+  prihodi?: Rashod[];
+  imaUlaz?: boolean;
+  isAzuriran?: boolean;
 };
 
 // Tip za podatke u grafikonu
@@ -80,87 +85,98 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { cjenovnik } = useCjenovnik();
+  const { appName } = useAppName();
 
-  // Autentikacija + Firestore real-time učitavanje
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        console.log("Nema prijavljenog korisnika");
+  // Funkcija za učitavanje arhive iz localStorage
+  const loadArhiva = useCallback(() => {
+    try {
+      const savedArhiva = localStorage.getItem("arhivaObracuna");
+      if (savedArhiva) {
+        const parsedArhiva: ArhiviraniObracun[] = JSON.parse(savedArhiva)
+          .map((item: any) => ({
+            ...item,
+            prihodi: item.prihodi ?? [],
+            ukupnoPrihod: item.ukupnoPrihod ?? 0,
+            imaUlaz: item.imaUlaz ?? false,
+            isAzuriran: item.isAzuriran ?? false,
+          }))
+          .sort((a: ArhiviraniObracun, b: ArhiviraniObracun) => {
+            const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+            const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+            return dateA - dateB; // Rastući redoslijed za dashboard
+          });
+        
+        setArhiva(parsedArhiva);
+        console.log("Učitano iz localStorage:", parsedArhiva.length, "obračuna");
+      } else {
         setArhiva([]);
-        setLoading(false);
-        return;
       }
-
-      console.log("Korisnik prijavljen:", user.uid);
-      setLoading(true);
+      setLoading(false);
       setError(null);
+    } catch (error) {
+      console.error("Greška pri učitavanju iz localStorage:", error);
+      setError("Greška pri učitavanju podataka.");
+      setLoading(false);
+    }
+  }, []);
 
-      try {
-        // Učitaj sve obračune iz Firestore-a
-        const querySnapshot = await getDocs(collection(db, "users", user.uid, "obracuni"));
-        const podaci: ArhiviraniObracun[] = [];
+  // Učitavanje arhive iz localStorage
+  useEffect(() => {
+    loadArhiva();
+  }, [loadArhiva]);
 
-        querySnapshot.forEach((doc) => {
-          podaci.push(doc.data() as ArhiviraniObracun);
-        });
-
-        // Sortiraj po datumu
-        podaci.sort((a, b) => {
-          const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
-          const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
-          return dateA - dateB;
-        });
-
-        console.log("Učitano iz Firestore-a:", podaci);
-        setArhiva(podaci);
-      } catch (error) {
-        console.error("Greška pri učitavanju iz Firestore-a:", error);
-        setError("Ne mogu učitati podatke. Provjeri internet vezu.");
-      } finally {
-        setLoading(false);
-      }
-    });
-
-    // Real-time listener
-    let unsubscribeFirestore: (() => void) | null = null;
-
-    const setupRealtimeListener = () => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const q = collection(db, "users", user.uid, "obracuni");
-      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-        const podaci: ArhiviraniObracun[] = [];
-        snapshot.forEach((doc) => {
-          podaci.push(doc.data() as ArhiviraniObracun);
-        });
-
-        podaci.sort((a, b) => {
-          const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
-          const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
-          return dateA - dateB;
-        });
-
-        setArhiva(podaci);
-        console.log("Real-time ažuriranje iz Firestore-a");
-      }, (error) => {
-        console.error("Greška u real-time listeneru:", error);
-      });
+  // Listener za promjene u arhivi
+  useEffect(() => {
+    const handleArhivaChange = () => {
+      setTimeout(() => {
+        loadArhiva();
+      }, 100);
     };
 
-    const unsubscribeAuthWithListener = onAuthStateChanged(auth, (user) => {
-      if (unsubscribeFirestore) unsubscribeFirestore();
-      if (user) {
-        setupRealtimeListener();
+    window.addEventListener("arhivaChanged", handleArhivaChange);
+    return () => {
+      window.removeEventListener("arhivaChanged", handleArhivaChange);
+    };
+  }, [loadArhiva]);
+
+  // OPCIONALNO: Pokušaj učitati iz Firestore-a (fallback)
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "users", user.uid, "obracuni"));
+        const firestorePodaci: ArhiviraniObracun[] = [];
+
+        querySnapshot.forEach((doc) => {
+          firestorePodaci.push(doc.data() as ArhiviraniObracun);
+        });
+
+        // Ako nema podataka u localStorage, koristi Firestore
+        const savedArhiva = localStorage.getItem("arhivaObracuna");
+        if (!savedArhiva && firestorePodaci.length > 0) {
+          firestorePodaci.sort((a, b) => {
+            const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+            const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+            return dateA - dateB;
+          });
+          setArhiva(firestorePodaci);
+          console.log("Učitano iz Firestore-a (fallback):", firestorePodaci.length, "obračuna");
+        }
+      } catch (error: any) {
+        // Ignoriraj greške dozvola - koristi localStorage
+        if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+          console.warn("Nije moguće učitati iz Firestore-a (možda nema interneta):", error);
+        }
+        // Ne prikazuj grešku, koristi localStorage
       }
     });
 
     return () => {
       unsubscribeAuth();
-      unsubscribeAuthWithListener();
-      if (unsubscribeFirestore) unsubscribeFirestore();
     };
-  }, [router]);
+  }, []);
 
   // Priprema podataka za grafikon
   const obracuni: Obracun[] = arhiva
@@ -179,8 +195,11 @@ export default function DashboardPage() {
       return dateA - dateB;
     });
 
-  // Dobivanje svih artikala za dropdown
-  const allArtikli = [...new Set(arhiva.flatMap((o) => o.artikli.map((a) => a.naziv)))];
+  // Dobivanje svih artikala za dropdown - koristi artikle iz cjenovnika i arhive
+  const artikliIzArhive = [...new Set(arhiva.flatMap((o) => o.artikli.map((a) => a.naziv)))];
+  const artikliIzCjenovnika = cjenovnik.map((item) => item.naziv);
+  // Kombiniraj i ukloni duplikate - prioritet artiklima iz cjenovnika
+  const allArtikli = [...new Set([...artikliIzCjenovnika, ...artikliIzArhive])].sort();
 
   // Funkcija za agregaciju podataka
   const aggregateData = (
@@ -373,18 +392,40 @@ export default function DashboardPage() {
           box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
         }
         @media (max-width: 768px) {
-          div[style*='padding: 30px'] { padding: 15px; }
-          h1 { font-size: 20px; }
+          div[style*='padding: 30px'] { padding: 10px; }
+          h1 { font-size: 18px; margin-bottom: 16px !important; }
+          div[style*='fontSize: 32'] { font-size: 24px !important; }
+          div[style*='fontSize: 28'] { font-size: 20px !important; }
           div[style*='display: flex'] { flex-direction: column; gap: 10px; }
           div[style*='min-width: 160px'] { min-width: 100%; }
-          button { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; min-height: 48px; }
-          input[type="date"] { width: 100%; margin: 5px 0; padding: 6px; font-size: 14px; }
-          div[style*='height: 400'] { height: 300px; }
-          div[style*='height: 300'] { height: 200px; }
+          button { width: 100%; margin: 5px 0; padding: 10px; font-size: 14px; min-height: 44px; }
+          input[type="date"] { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; min-height: 44px; }
+          div[style*='height: 400'] { height: 350px; padding: 10px !important; }
+          div[style*='height: 300'] { height: 280px; padding: 10px !important; }
+          .dashboard-card { min-width: 100% !important; }
+          .recharts-wrapper { width: 100% !important; }
+          .recharts-surface { width: 100% !important; }
         }
       `}</style>
 
-      <h1 style={{ marginBottom: 30, fontSize: 28, fontWeight: 700, color: "#111827" }}>Dashboard</h1>
+      {/* Ime aplikacije na sredini */}
+      <div style={{ 
+        textAlign: "center", 
+        marginBottom: 30,
+        paddingBottom: 20,
+        borderBottom: "2px solid #e5e7eb"
+      }}>
+        <h1 style={{ 
+          fontSize: 32, 
+          fontWeight: 700, 
+          color: "#111827",
+          margin: 0
+        }}>
+          {appName}
+        </h1>
+      </div>
+
+      <h1 style={{ marginBottom: 30, fontSize: 28, fontWeight: 700, color: "#111827" }}>Radna Površina</h1>
 
       {/* Range za prvi grafikon */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 30, alignItems: "center" }}>
@@ -435,6 +476,7 @@ export default function DashboardPage() {
 
       {/* Grafikon ukupne zarade */}
       <div
+        className="chart-container"
         style={{
           width: "100%",
           height: 400,
@@ -443,18 +485,25 @@ export default function DashboardPage() {
           padding: 20,
           boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
           marginBottom: 30,
+          overflow: "hidden",
         }}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+          <LineChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="datum" tick={{ fill: "#6b7280", fontSize: 13 }} />
-            <YAxis tick={{ fill: "#6b7280", fontSize: 13 }} />
+            <XAxis 
+              dataKey="datum" 
+              tick={{ fill: "#6b7280", fontSize: 11 }} 
+              angle={-45}
+              textAnchor="end"
+              height={60}
+            />
+            <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={50} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="top" height={36} />
-            <Line type="monotone" dataKey="artikli" name="Bruto" stroke="#16a34a" strokeWidth={3} dot={{ r: 4 }} />
-            <Line type="monotone" dataKey="rashod" name="Rashod" stroke="#dc2626" strokeWidth={3} dot={{ r: 4 }} />
-            <Line type="monotone" dataKey="neto" name="Neto" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
+            <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
+            <Line type="monotone" dataKey="artikli" name="Bruto" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="rashod" name="Rashod" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="neto" name="Neto" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -466,19 +515,16 @@ export default function DashboardPage() {
             label: "Bruto",
             value: totalBruto,
             icon: <FaArrowUp color="#16a34a" size={20} />,
-            growth: growth(totalBruto, Number(chartData[chartData.length - 2]?.artikli) || 0),
           },
           {
             label: "Rashod",
             value: totalRashod,
             icon: <FaArrowDown color="#dc2626" size={20} />,
-            growth: null,
           },
           {
             label: "Neto",
             value: totalNeto,
             icon: <FaDollarSign color="#3b82f6" size={20} />,
-            growth: growth(totalNeto, Number(chartData[chartData.length - 2]?.neto) || 0),
           },
         ].map((item) => (
           <div
@@ -502,11 +548,6 @@ export default function DashboardPage() {
             <div>
               <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 4 }}>{item.label}</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{item.value.toFixed(2)} KM</div>
-              {item.growth && (
-                <div style={{ fontSize: 13, color: Number(item.growth) >= 0 ? "#16a34a" : "#dc2626", marginTop: 2 }}>
-                  {Number(item.growth) >= 0 ? "Up" : "Down"} {Math.abs(Number(item.growth))}%
-                </div>
-              )}
             </div>
           </div>
         ))}
@@ -587,14 +628,20 @@ export default function DashboardPage() {
             marginBottom: 10,
           }}
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={selectedData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+            <LineChart data={selectedData} margin={{ top: 20, right: 10, left: -10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="datum" tick={{ fill: "#6b7280", fontSize: 13 }} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 13 }} />
+              <XAxis 
+                dataKey="datum" 
+                tick={{ fill: "#6b7280", fontSize: 11 }} 
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={50} />
               <Tooltip content={<CustomTooltip />} />
-              <Legend verticalAlign="top" height={36} />
-              <Line type="monotone" dataKey="utroseno" name="Prodaja" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} />
+              <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
+              <Line type="monotone" dataKey="utroseno" name="Prodaja" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

@@ -14,6 +14,8 @@ type ArhiviraniArtikal = {
   vrijednostKM: number;
   zestokoKolicina?: number;
   proizvodnaCijena?: number;
+  staroPocetnoStanje?: number; // Staro stanje prije ažuriranja
+  sačuvanUlaz?: number; // Sačuvani ulaz za prikaz u arhivi
 };
 
 type Rashod = {
@@ -36,6 +38,8 @@ type ArhiviraniObracun = {
   artikli: ArhiviraniArtikal[];
   rashodi: Rashod[];
   prihodi: Prihod[];
+  isAzuriran?: boolean; // Flag da je obračun bio ažuriran
+  imaUlaz?: boolean; // Flag da obračun ima ulaz
 };
 
 // ---- CSS Stilovi ----
@@ -122,6 +126,22 @@ const obracunContainerStyle: React.CSSProperties = {
   background: "#f9fafb",
 };
 
+const obracunContainerAzuriranStyle: React.CSSProperties = {
+  marginBottom: "32px",
+  border: "3px solid #f59e0b", // Narandžasta boja za ažurirane obračune
+  borderRadius: "12px",
+  padding: "16px",
+  background: "#fffbeb", // Svijetlo narandžasta pozadina
+};
+
+const obracunContainerUlazStyle: React.CSSProperties = {
+  marginBottom: "32px",
+  border: "3px solid #eab308", // Žuta boja za obračune s ulazom
+  borderRadius: "12px",
+  padding: "16px",
+  background: "#fefce8", // Svijetlo žuta pozadina
+};
+
 // ---- Glavna komponenta ----
 export default function ArhivaPage() {
   const [arhiva, setArhiva] = useState<ArhiviraniObracun[]>([]);
@@ -130,8 +150,8 @@ export default function ArhivaPage() {
   const [editedPrihodi, setEditedPrihodi] = useState<Prihod[]>([]);
   const obracunRefs = useRef<{ [key: string]: React.RefObject<HTMLDivElement | null> }>({});
 
-  // Učitavanje arhive iz localStorage
-  useEffect(() => {
+  // Funkcija za učitavanje arhive
+  const loadArhiva = React.useCallback(() => {
     const savedArhiva = localStorage.getItem("arhivaObracuna");
     if (savedArhiva) {
       const parsedArhiva: ArhiviraniObracun[] = JSON.parse(savedArhiva)
@@ -139,26 +159,70 @@ export default function ArhivaPage() {
           ...item,
           prihodi: item.prihodi ?? [],
           ukupnoPrihod: item.ukupnoPrihod ?? 0,
+          imaUlaz: item.imaUlaz ?? false, // Osiguraj da imaUlaz postoji
+          isAzuriran: item.isAzuriran ?? false, // Osiguraj da isAzuriran postoji
         }))
         .sort((a: ArhiviraniObracun, b: ArhiviraniObracun) => {
           const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
           const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
           return dateB - dateA;
         });
-      setArhiva(parsedArhiva);
+      
+      // Provjeri da li se arhiva stvarno promijenila prije postavljanja
+      setArhiva((prevArhiva) => {
+        const prevString = JSON.stringify(prevArhiva);
+        const newString = JSON.stringify(parsedArhiva);
+        if (prevString === newString) {
+          return prevArhiva; // Ne mijenjaj ako je ista
+        }
+        return parsedArhiva;
+      });
+      
       parsedArhiva.forEach((item) => {
         if (!obracunRefs.current[item.datum]) {
           obracunRefs.current[item.datum] = React.createRef<HTMLDivElement>();
         }
       });
+    } else {
+      setArhiva((prevArhiva) => {
+        if (prevArhiva.length === 0) {
+          return prevArhiva; // Ne mijenjaj ako je već prazna
+        }
+        return [];
+      });
     }
   }, []);
 
-  // Spremanje arhive u localStorage i slanje događaja
+  // Učitavanje arhive iz localStorage
+  useEffect(() => {
+    loadArhiva();
+  }, [loadArhiva]);
+
+  // Listener za promjene u arhivi (samo za vanjske promjene, ne za interne)
+  useEffect(() => {
+    const handleArhivaChange = () => {
+      // Koristi setTimeout da izbjegne direktnu petlju
+      setTimeout(() => {
+        loadArhiva();
+      }, 100);
+    };
+
+    window.addEventListener("arhivaChanged", handleArhivaChange);
+    return () => {
+      window.removeEventListener("arhivaChanged", handleArhivaChange);
+    };
+  }, [loadArhiva]);
+
+  // Spremanje arhive u localStorage (bez emitovanja događaja da izbjegnemo petlju)
   useEffect(() => {
     if (arhiva.length > 0) {
-      localStorage.setItem("arhivaObracuna", JSON.stringify(arhiva));
-      window.dispatchEvent(new Event("arhivaChanged"));
+      const currentArhiva = localStorage.getItem("arhivaObracuna");
+      const newArhivaString = JSON.stringify(arhiva);
+      
+      // Spremi samo ako se promijenilo
+      if (currentArhiva !== newArhivaString) {
+        localStorage.setItem("arhivaObracuna", newArhivaString);
+      }
     }
   }, [arhiva]);
 
@@ -252,25 +316,32 @@ export default function ArhivaPage() {
         }
         @media (max-width: 768px) {
           div[style*='padding: 24px'] {
-            padding: 15px; /* Smanjen padding na mobilu */
+            padding: 10px; /* Smanjen padding na mobilu */
           }
           h1 {
-            font-size: 20px; /* Smanjen font za naslove */
+            font-size: 18px; /* Smanjen font za naslove */
+            margin-bottom: 16px !important;
+          }
+          h2 {
+            font-size: 16px;
+            margin-bottom: 12px !important;
           }
           table {
             overflow-x: auto; /* Horizontalni scroll za tablice */
             display: block;
+            font-size: 12px;
           }
           th, td {
-            font-size: 12px; /* Smanjen font za tablice */
-            padding: 10px; /* Smanjen padding za ćelije */
+            font-size: 11px !important; /* Smanjen font za tablice */
+            padding: 8px !important; /* Smanjen padding za ćelije */
+            min-width: 80px;
           }
           button {
             width: 100%;
-            margin: 5px 0; /* Kompaktniji razmak */
-            padding: 8px;
+            margin: 4px 0; /* Kompaktniji razmak */
+            padding: 10px;
             font-size: 14px; /* Smanjen font za dugmadi */
-            min-height: 48px; /* Minimalna visina za touch target */
+            min-height: 44px; /* Minimalna visina za touch target */
           }
           div[style*='display: flex'] {
             flex-direction: column; /* Stack-anje elemenata vertikalno */
@@ -298,11 +369,20 @@ export default function ArhivaPage() {
         </p>
       ) : (
         <div>
-          {arhiva.map((item, index) => (
+          {arhiva.map((item, index) => {
+            // Odredi stil na osnovu flagova
+            let containerStyle = obracunContainerStyle;
+            if (item.imaUlaz) {
+              containerStyle = obracunContainerUlazStyle; // Žuta za ulaz
+            } else if (item.isAzuriran) {
+              containerStyle = obracunContainerAzuriranStyle; // Narandžasta za ažurirane
+            }
+
+            return (
             <div
               key={index}
               ref={obracunRefs.current[item.datum]!}
-              style={obracunContainerStyle}
+              style={containerStyle}
             >
               <div
                 style={{
@@ -314,6 +394,16 @@ export default function ArhivaPage() {
               >
                 <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#1f2937" }}>
                   Obračun - {item.datum}
+                  {item.imaUlaz && (
+                    <span style={{ fontSize: "14px", color: "#eab308", fontWeight: 500, marginLeft: "8px" }}>
+                      (Ima ulaz)
+                    </span>
+                  )}
+                  {item.isAzuriran && !item.imaUlaz && (
+                    <span style={{ fontSize: "14px", color: "#f59e0b", fontWeight: 500, marginLeft: "8px" }}>
+                      (Ažurirano)
+                    </span>
+                  )}
                 </h2>
                 <div>
                   <button
@@ -432,8 +522,17 @@ export default function ArhivaPage() {
                       <td style={tdStyle}>{a.cijena?.toFixed(2) ?? "-"}</td>
                       <td style={tdStyle}>{a.zestokoKolicina?.toFixed(3) ?? "-"}</td>
                       <td style={tdStyle}>{a.proizvodnaCijena?.toFixed(2) ?? "-"}</td>
-                      <td style={tdStyle}>{a.pocetnoStanje ?? "-"}</td>
-                      <td style={tdStyle}>{a.ulaz ?? "-"}</td>
+                      <td style={tdStyle}>
+                        {a.pocetnoStanje ?? "-"}
+                        {a.staroPocetnoStanje !== undefined && a.staroPocetnoStanje !== a.pocetnoStanje && (
+                          <span style={{ color: "#eab308", marginLeft: "4px", fontSize: "12px" }}>
+                            ({a.staroPocetnoStanje})
+                          </span>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        {a.ulaz !== undefined && a.ulaz !== null ? (a.ulaz > 0 ? a.ulaz : "-") : "-"}
+                      </td>
                       <td style={tdStyle}>{a.ukupno ?? "-"}</td>
                       <td style={tdStyle}>{a.utroseno ?? "-"}</td>
                       <td style={tdStyle}>{a.krajnjeStanje ?? "-"}</td>
@@ -503,7 +602,8 @@ export default function ArhivaPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

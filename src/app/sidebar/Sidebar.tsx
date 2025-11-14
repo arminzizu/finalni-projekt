@@ -23,7 +23,7 @@ const Sidebar = () => {
   }, []);
 
   const navLinks = [
-    { href: "/dashboard", label: "Dashboard", icon: <FaTachometerAlt /> },
+    { href: "/dashboard", label: "Radna površina", icon: <FaTachometerAlt /> },
     { href: "/obracun", label: "Obračun", icon: <FaCalculator /> },
     { href: "/arhiva", label: "Arhiva", icon: <FaArchive /> },
     { href: "/cjenovnik", label: "Cjenovnik", icon: <FaTags /> },

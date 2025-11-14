@@ -33,6 +33,41 @@ export default function LoginPage() {
       console.log("ID Token generisan:", idToken);
       console.log("Uspješan login:", user.email);
 
+      // Dohvati IP adresu i lokaciju pri login-u
+      try {
+        const ipResponse = await fetch("https://ip-api.com/json/?fields=status,message,query,country,regionName,city,isp");
+        const ipData = await ipResponse.json();
+        
+        let ipInfo = {
+          ip: "N/A",
+          location: "Nepoznata lokacija",
+          isp: "N/A"
+        };
+        
+        if (ipData.status === "success") {
+          ipInfo = {
+            ip: ipData.query,
+            location: `${ipData.city || ""}, ${ipData.regionName || ""}, ${ipData.country || ""}`.replace(/^,\s*|,\s*$/g, "").trim() || "Nepoznata lokacija",
+            isp: ipData.isp || "N/A"
+          };
+        } else {
+          // Fallback na ipify
+          const fallbackResponse = await fetch("https://api.ipify.org?format=json");
+          const fallbackData = await fallbackResponse.json();
+          ipInfo.ip = fallbackData.ip;
+        }
+        
+        // Spremi IP info u localStorage za kasnije korištenje
+        localStorage.setItem("lastLoginIP", JSON.stringify({
+          ...ipInfo,
+          timestamp: Date.now(),
+          userEmail: user.email
+        }));
+      } catch (ipError) {
+        console.error("Greška pri dohvaćanju IP adrese:", ipError);
+        // Nastavi sa login-om čak i ako IP dohvat ne uspije
+      }
+
       const response = await fetch("/api/set-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,6 +122,41 @@ export default function LoginPage() {
       const idToken = await user.getIdToken();
       console.log("ID Token generisan:", idToken);
       console.log("Uspješna registracija:", user.email);
+
+      // Dohvati IP adresu i lokaciju pri registraciji
+      try {
+        const ipResponse = await fetch("https://ip-api.com/json/?fields=status,message,query,country,regionName,city,isp");
+        const ipData = await ipResponse.json();
+        
+        let ipInfo = {
+          ip: "N/A",
+          location: "Nepoznata lokacija",
+          isp: "N/A"
+        };
+        
+        if (ipData.status === "success") {
+          ipInfo = {
+            ip: ipData.query,
+            location: `${ipData.city || ""}, ${ipData.regionName || ""}, ${ipData.country || ""}`.replace(/^,\s*|,\s*$/g, "").trim() || "Nepoznata lokacija",
+            isp: ipData.isp || "N/A"
+          };
+        } else {
+          // Fallback na ipify
+          const fallbackResponse = await fetch("https://api.ipify.org?format=json");
+          const fallbackData = await fallbackResponse.json();
+          ipInfo.ip = fallbackData.ip;
+        }
+        
+        // Spremi IP info u localStorage za kasnije korištenje
+        localStorage.setItem("lastLoginIP", JSON.stringify({
+          ...ipInfo,
+          timestamp: Date.now(),
+          userEmail: user.email
+        }));
+      } catch (ipError) {
+        console.error("Greška pri dohvaćanju IP adrese:", ipError);
+        // Nastavi sa registracijom čak i ako IP dohvat ne uspije
+      }
 
       const response = await fetch("/api/set-session", {
         method: "POST",
@@ -145,49 +215,77 @@ export default function LoginPage() {
 
   return (
     <div style={{ 
-      height: "100vh", 
+      minHeight: "100vh", 
       width: "100vw", 
       display: "flex", 
       justifyContent: "center", 
       alignItems: "center", 
-      backgroundColor: "#f0f0f0", 
-      position: "fixed", 
-      top: 0, 
-      left: 0,
-      overflow: "hidden"
+      backgroundColor: "#f4f5f7", 
+      padding: "20px",
+      boxSizing: "border-box"
     }}>
       <div style={{ 
-        padding: "20px", 
+        padding: "40px", 
         background: "white", 
-        borderRadius: "8px", 
-        boxShadow: "0 2px 10px rgba(0, 0, 0, 0.1)", 
+        borderRadius: "12px", 
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)", 
         textAlign: "center", 
-        maxWidth: "400px", 
-        width: "90%"
+        maxWidth: "450px", 
+        width: "100%",
+        margin: "0 auto"
       }}>
         <style jsx>{`
           @media (max-width: 768px) {
             h1 {
-              font-size: 20px; /* Smanjen font za naslove */
+              font-size: 24px;
+              margin-bottom: 24px;
             }
-            div[style*='padding: 20px'] {
-              padding: 15px; /* Smanjen padding na mobilu */
+            div[style*='padding: 40px'] {
+              padding: 24px;
             }
-            input, button {
+            input {
               width: 100%;
-              margin: 5px 0; /* Kompaktniji razmak */
-              padding: 10px;
-              font-size: 14px; /* Smanjen font za inpute i dugmadi */
-              min-height: 48px; /* Minimalna visina za touch target */
+              margin: 12px 0;
+              padding: 12px;
+              font-size: 16px;
+              min-height: 48px;
+              box-sizing: border-box;
             }
             button {
-              margin-bottom: 5px; /* Manji razmak između dugmadi */
+              width: 100%;
+              margin: 8px 0;
+              padding: 12px;
+              font-size: 16px;
+              min-height: 48px;
+              box-sizing: border-box;
+            }
+          }
+          @media (min-width: 769px) {
+            input {
+              margin: 12px 0;
+              padding: 12px;
+              font-size: 16px;
+            }
+            button {
+              margin: 8px 0;
+              padding: 12px;
+              font-size: 16px;
             }
           }
         `}</style>
-        <h1 style={{ marginBottom: "20px" }}>{loginMethod === "register" ? "Registracija" : loginMethod === "forgot" ? "Reset lozinke" : "Login"}</h1>
+        <h1 style={{ marginBottom: "32px", fontSize: "28px", fontWeight: 600, color: "#1f2937" }}>
+          {loginMethod === "register" ? "Registracija" : loginMethod === "forgot" ? "Reset lozinke" : "Prijava"}
+        </h1>
         {error && (
-          <div style={{ color: "red", marginBottom: "10px", padding: "10px", background: "#ffebee" }}>
+          <div style={{ 
+            color: "#dc2626", 
+            marginBottom: "16px", 
+            padding: "12px 16px", 
+            background: "#fef2f2", 
+            borderRadius: "8px",
+            border: "1px solid #fecaca",
+            fontSize: "14px"
+          }}>
             {error}
             {error.includes("e-mail je već registriran") && (
               <div>
@@ -212,7 +310,15 @@ export default function LoginPage() {
           </div>
         )}
         {message && (
-          <div style={{ color: "green", marginBottom: "10px", padding: "10px", background: "#e6ffe6" }}>
+          <div style={{ 
+            color: "#16a34a", 
+            marginBottom: "16px", 
+            padding: "12px 16px", 
+            background: "#f0fdf4", 
+            borderRadius: "8px",
+            border: "1px solid #bbf7d0",
+            fontSize: "14px"
+          }}>
             {message}
           </div>
         )}
@@ -220,13 +326,38 @@ export default function LoginPage() {
           <>
             <button
               onClick={() => setLoginMethod("email")}
-              style={{ width: "100%", padding: "10px", background: "#34a853", color: "white", border: "none", borderRadius: "5px", marginBottom: "10px", cursor: "pointer" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#34a853", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                marginBottom: "12px", 
+                cursor: "pointer",
+                fontSize: "16px",
+                fontWeight: 500,
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Prijava putem e-maila
             </button>
             <button
               onClick={() => setLoginMethod("register")}
-              style={{ width: "100%", padding: "10px", background: "#fbbc05", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#fbbc05", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                cursor: "pointer",
+                fontSize: "16px",
+                fontWeight: 500,
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Registracija
             </button>
@@ -238,31 +369,94 @@ export default function LoginPage() {
               placeholder="Unesi e-mail adresu"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <input
               type="password"
               placeholder="Unesi lozinku"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <button 
               onClick={handleEmailLogin} 
               disabled={loading || !email || !password}
-              style={{ width: "100%", padding: "10px", background: "#34a853", color: "white", border: "none", borderRadius: "5px", cursor: (loading || !email || !password) ? "not-allowed" : "pointer" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: loading || !email || !password ? "#9ca3af" : "#34a853", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                cursor: (loading || !email || !password) ? "not-allowed" : "pointer",
+                fontSize: "16px",
+                fontWeight: 500,
+                marginTop: "8px",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               {loading ? "Prijavljujem..." : "Prijavi se"}
             </button>
             <button 
               onClick={() => setLoginMethod("forgot")}
-              style={{ width: "100%", padding: "10px", background: "#4285f4", color: "white", border: "none", borderRadius: "5px", marginTop: "10px" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#4285f4", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                marginTop: "8px",
+                fontSize: "16px",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Zaboravio sam lozinku
             </button>
             <button 
               onClick={handleBack} 
-              style={{ width: "100%", padding: "10px", background: "#fbbc05", color: "white", border: "none", borderRadius: "5px", marginTop: "10px" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#6b7280", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                marginTop: "8px",
+                fontSize: "16px",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Nazad
             </button>
@@ -274,32 +468,94 @@ export default function LoginPage() {
               placeholder="Unesi e-mail adresu"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <input
               type="password"
               placeholder="Unesi lozinku"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <input
               type="password"
               placeholder="Potvrdi lozinku"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <button 
               onClick={handleRegister} 
               disabled={loading || !email || !password || !confirmPassword}
-              style={{ width: "100%", padding: "10px", background: "#fbbc05", color: "white", border: "none", borderRadius: "5px", cursor: (loading || !email || !password || !confirmPassword) ? "not-allowed" : "pointer" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: loading || !email || !password || !confirmPassword ? "#9ca3af" : "#fbbc05", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                cursor: (loading || !email || !password || !confirmPassword) ? "not-allowed" : "pointer",
+                fontSize: "16px",
+                fontWeight: 500,
+                marginTop: "8px",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               {loading ? "Registrujem..." : "Registriraj se"}
             </button>
             <button 
               onClick={handleBack} 
-              style={{ width: "100%", padding: "10px", background: "#4285f4", color: "white", border: "none", borderRadius: "5px", marginTop: "10px" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#6b7280", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                marginTop: "8px",
+                fontSize: "16px",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Nazad
             </button>
@@ -311,18 +567,56 @@ export default function LoginPage() {
               placeholder="Unesi e-mail adresu"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%", padding: "10px", margin: "10px 0", borderRadius: "5px", border: "1px solid #ccc" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                margin: "12px 0", 
+                borderRadius: "8px", 
+                border: "1px solid #d1d5db",
+                fontSize: "16px",
+                outline: "none",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3b82f6"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
             <button 
               onClick={handleForgotPassword} 
               disabled={loading || !email}
-              style={{ width: "100%", padding: "10px", background: "#4285f4", color: "white", border: "none", borderRadius: "5px", cursor: (loading || !email) ? "not-allowed" : "pointer" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: loading || !email ? "#9ca3af" : "#4285f4", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                cursor: (loading || !email) ? "not-allowed" : "pointer",
+                fontSize: "16px",
+                fontWeight: 500,
+                marginTop: "8px",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               {loading ? "Šaljem link..." : "Pošalji link za reset"}
             </button>
             <button 
               onClick={handleBack} 
-              style={{ width: "100%", padding: "10px", background: "#fbbc05", color: "white", border: "none", borderRadius: "5px", marginTop: "10px" }}
+              style={{ 
+                width: "100%", 
+                padding: "12px 16px", 
+                background: "#6b7280", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "8px", 
+                marginTop: "8px",
+                fontSize: "16px",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background-color 0.2s",
+                boxSizing: "border-box"
+              }}
             >
               Nazad
             </button>

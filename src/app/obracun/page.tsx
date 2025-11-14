@@ -18,6 +18,8 @@ type Artikal = {
   zestokoKolicina?: number;
   proizvodnaCijena?: number;
   isKrajnjeSet: boolean;
+  staroPocetnoStanje?: number; // Za praćenje starog stanja pri ažuriranju
+  sačuvanUlaz?: number; // Sačuvaj ulaz prije resetiranja za prikaz u arhivi
 };
 
 type Rashod = {
@@ -41,6 +43,8 @@ type ArhiviraniArtikal = {
   vrijednostKM: number;
   zestokoKolicina?: number;
   proizvodnaCijena?: number;
+  staroPocetnoStanje?: number; // Staro stanje prije ažuriranja
+  sačuvanUlaz?: number; // Sačuvani ulaz za prikaz u arhivi
 };
 
 type ArhiviraniObracun = {
@@ -52,6 +56,8 @@ type ArhiviraniObracun = {
   artikli: ArhiviraniArtikal[];
   rashodi: Rashod[];
   prihodi: Prihod[];
+  isAzuriran?: boolean; // Flag da je obračun bio ažuriran
+  imaUlaz?: boolean; // Flag da obračun ima ulaz
 };
 
 // ---- CSS Stilovi ----
@@ -167,6 +173,15 @@ const cancelButtonStyle: React.CSSProperties = {
   fontSize: "14px",
 };
 
+// Stilovi za niska stanja
+const lowStockYellowStyle: React.CSSProperties = {
+  backgroundColor: "#fef3c7", // Žuta pozadina
+};
+
+const lowStockRedStyle: React.CSSProperties = {
+  backgroundColor: "#fee2e2", // Crvena pozadina
+};
+
 const rashodInputStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: "160px",
@@ -192,6 +207,7 @@ export default function ObracunPage() {
   const [editRashod, setEditRashod] = useState<Rashod>({ naziv: "", cijena: 0 });
   const [editPrihod, setEditPrihod] = useState<Prihod>({ naziv: "", cijena: 0 });
   const [trenutniDatum, setTrenutniDatum] = useState<Date>(new Date());
+  const [isAzuriran, setIsAzuriran] = useState<boolean>(false); // Praćenje da li je obračun bio ažuriran
 
   // Inicijalizacija artikala na osnovu cjenovnika
   useEffect(() => {
@@ -207,8 +223,11 @@ export default function ObracunPage() {
       zestokoKolicina: item.zestokoKolicina,
       proizvodnaCijena: item.proizvodnaCijena,
       isKrajnjeSet: false,
+      staroPocetnoStanje: undefined,
+      sačuvanUlaz: undefined,
     }));
     setArtikli(inicijalniArtikli);
+    setIsAzuriran(false); // Resetiraj flag pri inicijalizaciji
   }, [cjenovnik]);
 
   const formatirajDatum = (datum: Date): string => {
@@ -354,19 +373,105 @@ export default function ObracunPage() {
     setEditPrihod({ naziv: "", cijena: 0 });
   };
 
-  // NOVO: Čuvanje u Firestore
-  const handleSaveObracun = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      alert("Moraš biti prijavljen da sačuvaš obračun!");
+  // Funkcija za ažuriranje obračuna (bez spremanja u arhivu)
+  const handleAzurirajObracun = () => {
+    // Provjeri da li ima artikala s ulazom
+    const imaUlaz = artikli.some((a) => a.ulaz > 0);
+    if (!imaUlaz) {
+      alert("Nema artikala s ulazom za ažuriranje!");
       return;
     }
 
+    const datumString = formatirajDatum(trenutniDatum);
+
+    // Sačuvaj ulaz u localStorage cache po datumu
+    const ulazCache: { [naziv: string]: { ulaz: number; staroPocetnoStanje: number } } = {};
+    artikli.forEach((a) => {
+      if (a.ulaz > 0) {
+        ulazCache[a.naziv] = {
+          ulaz: a.ulaz,
+          staroPocetnoStanje: a.staroPocetnoStanje ?? a.pocetnoStanje,
+        };
+      }
+    });
+
+    // Spremi cache u localStorage
+    const cacheKey = `ulazCache_${datumString}`;
+    localStorage.setItem(cacheKey, JSON.stringify(ulazCache));
+
+    // Ažuriraj cjenovnik i artikle - sačuvaj staro stanje prije ažuriranja
+    setCjenovnik((prev) =>
+      prev.map((item) => {
+        const artikal = artikli.find((a) => a.naziv === item.naziv);
+        if (!artikal || artikal.ulaz === 0) return item;
+        
+        // Sačuvaj staro početno stanje prije ažuriranja
+        const staroPocetnoStanje = item.pocetnoStanje;
+        const novoPocetnoStanje = artikal.naziv.toLowerCase().includes("kafa")
+          ? 0
+          : artikal.pocetnoStanje + artikal.ulaz;
+        
+        return {
+          ...item,
+          pocetnoStanje: novoPocetnoStanje,
+        };
+      })
+    );
+
+    // Ažuriraj artikle u formi - postavi novo početno stanje i resetiraj ulaz
+    setArtikli((prev) =>
+      prev.map((a) => {
+        if (a.ulaz > 0) {
+          const staroPocetnoStanje = a.staroPocetnoStanje ?? a.pocetnoStanje;
+          const sačuvanUlaz = a.ulaz; // Sačuvaj ulaz prije resetiranja
+          const novoPocetnoStanje = a.naziv.toLowerCase().includes("kafa")
+            ? 0
+            : a.pocetnoStanje + a.ulaz;
+          
+          return {
+            ...a,
+            pocetnoStanje: novoPocetnoStanje,
+            ulaz: 0,
+            ukupno: novoPocetnoStanje,
+            staroPocetnoStanje: staroPocetnoStanje, // Sačuvaj staro stanje
+            sačuvanUlaz: sačuvanUlaz, // Sačuvaj ulaz za prikaz u arhivi
+          };
+        }
+        return a;
+      })
+    );
+
+    setIsAzuriran(true); // Označi da je obračun bio ažuriran
+    alert("Obračun ažuriran! Početno stanje artikala je ažurirano.");
+  };
+
+  // Čuvanje obračuna (localStorage + opcionalno Firestore)
+  const handleSaveObracun = async () => {
     const ukupnoArtikli = artikli.reduce((sum, a) => sum + a.vrijednostKM, 0);
     const ukupnoRashod = rashodi.reduce((sum, r) => sum + r.cijena, 0);
     const ukupnoPrihod = prihodi.reduce((sum, p) => sum + p.cijena, 0);
     const neto = ukupnoArtikli + ukupnoPrihod - ukupnoRashod;
     const datumString = formatirajDatum(trenutniDatum);
+
+    // Učitaj cache ulaza za ovaj datum
+    const cacheKey = `ulazCache_${datumString}`;
+    const cachedUlaz = localStorage.getItem(cacheKey);
+    let ulazCache: { [naziv: string]: { ulaz: number; staroPocetnoStanje: number } } = {};
+    if (cachedUlaz) {
+      try {
+        ulazCache = JSON.parse(cachedUlaz);
+      } catch (e) {
+        console.warn("Greška pri čitanju cache-a ulaza:", e);
+      }
+    }
+
+    // Provjeri da li obračun ima ulaz (trenutni, sačuvani u state-u, ili iz cache-a)
+    const imaUlaz = artikli.some((a) => {
+      const trenutniUlaz = a.ulaz > 0;
+      const sačuvanUlaz = a.sačuvanUlaz !== undefined && a.sačuvanUlaz > 0;
+      const cachedUlazZaArtikal = ulazCache[a.naziv]?.ulaz > 0;
+      return trenutniUlaz || sačuvanUlaz || cachedUlazZaArtikal;
+    });
 
     const arhiviraniObracun: ArhiviraniObracun = {
       datum: datumString,
@@ -374,31 +479,84 @@ export default function ObracunPage() {
       ukupnoRashod,
       ukupnoPrihod,
       neto,
-      artikli: artikli.map((a) => ({
-        naziv: a.naziv,
-        cijena: a.cijena,
-        pocetnoStanje: a.pocetnoStanje,
-        ulaz: a.ulaz,
-        ukupno: a.ukupno,
-        utroseno: a.utroseno,
-        krajnjeStanje: a.krajnjeStanje,
-        vrijednostKM: a.vrijednostKM,
-        zestokoKolicina: a.zestokoKolicina,
-        proizvodnaCijena: a.proizvodnaCijena,
-      })),
+      artikli: artikli.map((a) => {
+        // Prioritet: 1. trenutni ulaz, 2. sačuvani ulaz u state-u, 3. ulaz iz cache-a
+        let ulazZaPrikaz = a.ulaz;
+        let staroPocetnoStanjeZaPrikaz = a.staroPocetnoStanje;
+
+        if (a.ulaz === 0) {
+          if (a.sačuvanUlaz !== undefined && a.sačuvanUlaz > 0) {
+            ulazZaPrikaz = a.sačuvanUlaz;
+            staroPocetnoStanjeZaPrikaz = a.staroPocetnoStanje;
+          } else if (ulazCache[a.naziv]) {
+            ulazZaPrikaz = ulazCache[a.naziv].ulaz;
+            staroPocetnoStanjeZaPrikaz = ulazCache[a.naziv].staroPocetnoStanje;
+          }
+        }
+        
+        return {
+          naziv: a.naziv,
+          cijena: a.cijena,
+          pocetnoStanje: a.pocetnoStanje,
+          ulaz: ulazZaPrikaz, // Sačuvaj ulaz za prikaz u arhivi
+          ukupno: a.ukupno,
+          utroseno: a.utroseno,
+          krajnjeStanje: a.krajnjeStanje,
+          vrijednostKM: a.vrijednostKM,
+          zestokoKolicina: a.zestokoKolicina,
+          proizvodnaCijena: a.proizvodnaCijena,
+          staroPocetnoStanje: staroPocetnoStanjeZaPrikaz, // Sačuvaj staro stanje ako postoji
+          sačuvanUlaz: ulazZaPrikaz, // Sačuvaj ulaz
+        };
+      }),
       rashodi,
       prihodi,
+      isAzuriran: isAzuriran, // Sačuvaj flag da je obračun bio ažuriran
+      imaUlaz: imaUlaz, // Sačuvaj flag da obračun ima ulaz
     };
 
-    try {
-      // ČUVANJE U FIRESTORE
-      const docRef = doc(db, "users", user.uid, "obracuni", datumString);
-      await setDoc(docRef, {
-        ...arhiviraniObracun,
-        savedAt: serverTimestamp(),
-      });
+    // Obriši cache nakon što se obračun spremi
+    localStorage.removeItem(cacheKey);
 
-      console.log("Obracun sačuvan u Firestore:", datumString);
+    try {
+      // ČUVANJE U LOCALSTORAGE (glavni način - radi bez interneta)
+      const savedArhiva = localStorage.getItem("arhivaObracuna");
+      let arhiva: ArhiviraniObracun[] = savedArhiva ? JSON.parse(savedArhiva) : [];
+      
+      // Ukloni postojeći obračun za isti datum ako postoji
+      arhiva = arhiva.filter((item) => item.datum !== datumString);
+      
+      // Dodaj novi obračun
+      arhiva.push(arhiviraniObracun);
+      
+      // Sortiraj po datumu (najnoviji prvo)
+      arhiva.sort((a, b) => {
+        const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+        const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+        return dateB - dateA;
+      });
+      
+      localStorage.setItem("arhivaObracuna", JSON.stringify(arhiva));
+      console.log("Obračun sačuvan u localStorage:", datumString);
+
+      // OPCIONALNO: Pokušaj sačuvati u Firestore (ako postoji korisnik i internet)
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const docRef = doc(db, "users", user.uid, "obracuni", datumString);
+          await setDoc(docRef, {
+            ...arhiviraniObracun,
+            savedAt: serverTimestamp(),
+          });
+          console.log("Obračun sačuvan u Firestore:", datumString);
+        } catch (firestoreError: any) {
+          // Ignoriraj greške dozvola - podaci su već sačuvani u localStorage
+          if (firestoreError.code !== "permission-denied" && firestoreError.code !== "missing-or-insufficient-permissions") {
+            console.warn("Nije moguće sačuvati u Firestore (možda nema interneta):", firestoreError);
+          }
+          // Ne blokiraj spremanje ako Firestore ne radi
+        }
+      }
 
       // Ažuriranje cjenovnika (početno stanje za sljedeći dan)
       setCjenovnik((prev) =>
@@ -435,6 +593,8 @@ export default function ObracunPage() {
               krajnjeStanje: 0,
               vrijednostKM: 0,
               isKrajnjeSet: false,
+              sačuvanUlaz: undefined,
+              staroPocetnoStanje: undefined,
             };
           } else {
             const novoPocetnoStanje = a.isKrajnjeSet ? a.krajnjeStanje : a.ukupno;
@@ -447,6 +607,8 @@ export default function ObracunPage() {
               krajnjeStanje: 0,
               vrijednostKM: 0,
               isKrajnjeSet: false,
+              sačuvanUlaz: undefined,
+              staroPocetnoStanje: undefined,
             };
           }
         })
@@ -458,14 +620,23 @@ export default function ObracunPage() {
       setNewPrihod({ naziv: "", cijena: 0 });
       setEditRashodIndex(null);
       setEditPrihodIndex(null);
+      setIsAzuriran(false); // Resetiraj flag nakon spremanja
+      
+      // Resetiraj sačuvane ulaze u artiklima
+      setArtikli((prev) =>
+        prev.map((a) => ({
+          ...a,
+          sačuvanUlaz: undefined,
+        }))
+      );
 
       // Emituj događaj (ako koristiš fallback)
       window.dispatchEvent(new Event("arhivaChanged"));
 
-      alert("Obracun uspješno sačuvan!");
+      alert("Obračun uspješno sačuvan!");
     } catch (error) {
-      console.error("Greška pri čuvanju u Firestore:", error);
-      alert("Greška pri čuvanju. Provjeri internet vezu.");
+      console.error("Greška pri čuvanju:", error);
+      alert("Greška pri čuvanju. Provjeri konzolu za detalje.");
     }
   };
 
@@ -503,6 +674,9 @@ export default function ObracunPage() {
         .cancel-button:hover {
           color: #b91c1c;
         }
+        button[style*="background: #f59e0b"]:hover {
+          background-color: #d97706 !important;
+        }
         @media (max-width: 768px) {
           div[style*="maxWidth: 1200px"] { padding: 8px; }
           table:first-of-type { display: flex; flex-direction: column; }
@@ -527,7 +701,7 @@ export default function ObracunPage() {
         Obračun
       </h1>
 
-      <div style={{ marginBottom: "20px", display: "flex", alignItems: "center" }}>
+      <div style={{ marginBottom: "20px", display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
         <label style={{ fontSize: "14px", color: "#1f2937", marginRight: "8px" }}>
           Datum obračuna:
         </label>
@@ -537,9 +711,20 @@ export default function ObracunPage() {
           onChange={handleDatumChange}
           style={dateInputStyle}
         />
+        <button 
+          style={{ ...buttonStyle, background: "#f59e0b", maxWidth: "160px" }} 
+          onClick={handleAzurirajObracun}
+        >
+          Ažuriraj obračun
+        </button>
         <button style={saveButtonStyle} onClick={handleSaveObracun} className="save-button">
           Sačuvaj obračun
         </button>
+        {isAzuriran && (
+          <span style={{ fontSize: "14px", color: "#f59e0b", fontWeight: 500, marginLeft: "8px" }}>
+            (Ažurirano)
+          </span>
+        )}
       </div>
 
       {/* Artikli */}
@@ -562,38 +747,74 @@ export default function ObracunPage() {
           </tr>
         </thead>
         <tbody>
-          {artikli.map((a, index) => (
-            <tr key={index}>
-              <td style={tdStyle} data-label="Artikal">{a.naziv}</td>
-              <td style={tdStyle} data-label="Cijena">{a.cijena.toFixed(2)}</td>
-              <td style={tdStyle} data-label="Zestoko Količina (ml)">{a.zestokoKolicina ? a.zestokoKolicina.toFixed(3) : "-"}</td>
-              <td style={tdStyle} data-label="Proizvodna Cijena">{a.proizvodnaCijena ? a.proizvodnaCijena.toFixed(2) : "-"}</td>
-              <td style={tdStyle} data-label="Početno stanje">{a.pocetnoStanje}</td>
-              <td style={tdStyle} data-label="Ulaz">
-                <input
-                  type="number"
-                  value={a.ulaz === 0 ? "" : a.ulaz}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => handleUlazChange(index, Number(e.target.value) || 0)}
-                  style={inputStyle}
-                  className="no-spin"
-                />
-              </td>
-              <td style={tdStyle} data-label="Ukupno">{a.ukupno}</td>
-              <td style={tdStyle} data-label="Utrošeno">{a.utroseno}</td>
-              <td style={tdStyle} data-label="Krajnje stanje">
-                <input
-                  type="number"
-                  value={a.krajnjeStanje === 0 ? "" : a.krajnjeStanje}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => handleKrajnjeStanjeChange(index, e.target.value)}
-                  style={inputStyle}
-                  className="no-spin"
-                />
-              </td>
-              <td style={tdStyle} data-label="Vrijednost KM">{a.vrijednostKM.toFixed(2)}</td>
-            </tr>
-          ))}
+          {artikli.map((a, index) => {
+            // Funkcija za određivanje boje na osnovu početnog stanja
+            const getRowStyle = (): React.CSSProperties => {
+              // Kafa je posebna - ne primjenjuj boje
+              if (a.naziv.toLowerCase() === "kafa" || a.naziv.toLowerCase() === "kava") {
+                return {};
+              }
+              
+              // Za žestoka pića (ima zestokoKolicina)
+              if (a.zestokoKolicina && a.zestokoKolicina > 0) {
+                // Za žestoka pića, pocetnoStanje je već u litrama (npr. 5 = 5 litara)
+                // Koristimo ukupno (pocetnoStanje + ulaz) jer uključuje i ulaz
+                const kolicinaULitrama = a.ukupno;
+                
+                // Ispod 1L = crvena, 1L do 2L (uključujući 2L) = žuta, preko 2L = normalna
+                if (kolicinaULitrama < 1) {
+                  return lowStockRedStyle;
+                } else if (kolicinaULitrama <= 2) {
+                  return lowStockYellowStyle;
+                }
+              } else {
+                // Za obične artikle - provjeri početno stanje
+                // Prvo provjeri crvenu (nižu granicu), pa žutu (višu granicu)
+                if (a.pocetnoStanje < 15) {
+                  return lowStockRedStyle;
+                } else if (a.pocetnoStanje < 30) {
+                  return lowStockYellowStyle;
+                }
+              }
+              
+              return {};
+            };
+
+            const rowStyle = getRowStyle();
+            
+            return (
+              <tr key={index} style={rowStyle}>
+                <td style={tdStyle} data-label="Artikal">{a.naziv}</td>
+                <td style={tdStyle} data-label="Cijena">{a.cijena.toFixed(2)}</td>
+                <td style={tdStyle} data-label="Zestoko Količina (ml)">{a.zestokoKolicina ? a.zestokoKolicina.toFixed(3) : "-"}</td>
+                <td style={tdStyle} data-label="Proizvodna Cijena">{a.proizvodnaCijena ? a.proizvodnaCijena.toFixed(2) : "-"}</td>
+                <td style={tdStyle} data-label="Početno stanje">{a.pocetnoStanje}</td>
+                <td style={tdStyle} data-label="Ulaz">
+                  <input
+                    type="number"
+                    value={a.ulaz === 0 ? "" : a.ulaz}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleUlazChange(index, Number(e.target.value) || 0)}
+                    style={inputStyle}
+                    className="no-spin"
+                  />
+                </td>
+                <td style={tdStyle} data-label="Ukupno">{a.ukupno}</td>
+                <td style={tdStyle} data-label="Utrošeno">{a.utroseno}</td>
+                <td style={tdStyle} data-label="Krajnje stanje">
+                  <input
+                    type="number"
+                    value={a.krajnjeStanje === 0 ? "" : a.krajnjeStanje}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleKrajnjeStanjeChange(index, e.target.value)}
+                    style={inputStyle}
+                    className="no-spin"
+                  />
+                </td>
+                <td style={tdStyle} data-label="Vrijednost KM">{a.vrijednostKM.toFixed(2)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { AppNameProvider } from "./AppNameContext";
 
 // ---- Tip artikla ----
 type ArtiklCijena = {
@@ -93,11 +92,9 @@ export function CjenovnikProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppNameProvider>
-      <CjenovnikContext.Provider value={{ cjenovnik, pendingCjenovnik, setCjenovnik, addArtikal, updateCjenovnik }}>
-        {children}
-      </CjenovnikContext.Provider>
-    </AppNameProvider>
+    <CjenovnikContext.Provider value={{ cjenovnik, pendingCjenovnik, setCjenovnik, addArtikal, updateCjenovnik }}>
+      {children}
+    </CjenovnikContext.Provider>
   );
 }
 

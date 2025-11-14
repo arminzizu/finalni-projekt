@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useCjenovnik } from "../context/CjenovnikContext";
+import { usePathname } from "next/navigation";
 import { FaTrash, FaPlus } from "react-icons/fa";
 
 // ---- Tipovi ----
@@ -156,6 +157,48 @@ export default function CjenovnikPage() {
   const [newArtiklZapreminaFlase, setNewArtiklZapreminaFlase] = useState<string>("");
   const [newArtiklPocetnoStanje, setNewArtiklPocetnoStanje] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [isPasswordProtected, setIsPasswordProtected] = useState<boolean | null>(null); // null = loading
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const pathname = usePathname();
+
+  // Provjera šifre pri učitavanju i pri navigaciji - traži šifru svaki put
+  useEffect(() => {
+    const savedPassword = localStorage.getItem("cjenovnikPassword");
+    
+    // Ako postoji šifra, traži je svaki put (ne koristi sessionStorage)
+    if (savedPassword) {
+      setIsPasswordProtected(true);
+    } else {
+      // Ako nema šifre, ne traži je (prvi put)
+      setIsPasswordProtected(false);
+    }
+  }, [pathname]); // Provjeri svaki put kada se pathname promijeni
+
+  const handlePasswordSubmit = () => {
+    const savedPassword = localStorage.getItem("cjenovnikPassword");
+    
+    if (!savedPassword) {
+      // Prvi put - postavi šifru
+      if (passwordInput.trim().length >= 4) {
+        localStorage.setItem("cjenovnikPassword", passwordInput);
+        setIsPasswordProtected(false);
+        setPasswordInput("");
+        setPasswordError("");
+      } else {
+        setPasswordError("Šifra mora imati najmanje 4 znaka");
+      }
+    } else {
+      // Provjeri šifru - svaki put traži šifru, ne koristi sessionStorage
+      if (passwordInput === savedPassword) {
+        setIsPasswordProtected(false);
+        setPasswordInput("");
+        setPasswordError("");
+      } else {
+        setPasswordError("Pogrešna šifra!");
+      }
+    }
+  };
 
   // ---- Automatski izračun nabavne cijene po dozi za žestoka pića ----
   const calculateNabavnaPoDozi = () => {
@@ -255,6 +298,97 @@ export default function CjenovnikPage() {
     setCjenovnik(cjenovnik.filter((artikl) => artikl.naziv !== naziv)); // Ispravljeno korištenje setCjenovnik
   };
 
+  // Ako se još učitava provjera, prikaži loading
+  if (isPasswordProtected === null) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#f4f5f7"
+      }}>
+        <div style={{ fontSize: "16px", color: "#6b7280" }}>Učitavanje...</div>
+      </div>
+    );
+  }
+
+  // Ako je zaštićeno šifrom, prikaži password prompt
+  if (isPasswordProtected) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#f4f5f7",
+        padding: "20px"
+      }}>
+        <div style={{
+          background: "white",
+          padding: "40px",
+          borderRadius: "12px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
+          maxWidth: "400px",
+          width: "100%"
+        }}>
+          <h2 style={{ fontSize: "24px", fontWeight: 600, marginBottom: "24px", textAlign: "center", color: "#1f2937" }}>
+            Zaštićeno šifrom
+          </h2>
+          <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "20px", textAlign: "center" }}>
+            {localStorage.getItem("cjenovnikPassword") 
+              ? "Unesite šifru za pristup Cjenovnik stranici"
+              : "Postavite šifru za Cjenovnik stranicu (min. 4 znaka)"}
+          </p>
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(e) => {
+              setPasswordInput(e.target.value);
+              setPasswordError("");
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter") {
+                handlePasswordSubmit();
+              }
+            }}
+            placeholder="Unesite šifru"
+            style={{
+              width: "100%",
+              padding: "12px 16px",
+              marginBottom: "12px",
+              borderRadius: "8px",
+              border: passwordError ? "1px solid #dc2626" : "1px solid #d1d5db",
+              fontSize: "16px",
+              outline: "none",
+              boxSizing: "border-box"
+            }}
+          />
+          {passwordError && (
+            <p style={{ color: "#dc2626", fontSize: "14px", marginBottom: "12px" }}>{passwordError}</p>
+          )}
+          <button
+            onClick={handlePasswordSubmit}
+            style={{
+              width: "100%",
+              padding: "12px 16px",
+              background: "#3b82f6",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "16px",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "background-color 0.2s"
+            }}
+          >
+            {localStorage.getItem("cjenovnikPassword") ? "Pristupi" : "Postavi šifru"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={containerStyle}>
       <style jsx>{`
@@ -270,35 +404,45 @@ export default function CjenovnikPage() {
         }
         @media (max-width: 768px) {
           div[style*='padding: 24px'] {
-            padding: 15px; /* Smanjen padding na mobilu */
+            padding: 10px; /* Smanjen padding na mobilu */
           }
           h1 {
-            font-size: 20px; /* Smanjen font za naslove */
+            font-size: 18px; /* Smanjen font za naslove */
+            margin-bottom: 16px !important;
           }
           h2 {
             font-size: 16px; /* Smanjen font za podnaslove */
+            margin-bottom: 12px !important;
           }
           div[style*='display: flex'] {
             flex-direction: column; /* Stack-anje elemenata vertikalno */
-            gap: 10px;
+            gap: 8px;
           }
           input, select {
             width: 100%; /* Inputi i select popunjavaju širinu */
-            margin: 5px 0; /* Kompaktniji razmak */
+            margin: 4px 0; /* Kompaktniji razmak */
             font-size: 14px; /* Smanjen font za inpute */
-            min-height: 48px; /* Minimalna visina za touch target */
+            min-height: 44px; /* Minimalna visina za touch target */
+            padding: 8px;
           }
           button {
             width: 100%;
-            margin: 5px 0; /* Kompaktniji razmak */
+            margin: 4px 0; /* Kompaktniji razmak */
             font-size: 14px; /* Smanjen font za dugmadi */
-            min-height: 48px; /* Minimalna visina za touch target */
+            min-height: 44px; /* Minimalna visina za touch target */
+            padding: 10px;
           }
           table {
             font-size: 12px; /* Smanjen font za tablice */
           }
           th, td {
-            padding: 10px; /* Smanjen padding u tablicama */
+            font-size: 11px !important;
+            padding: 8px !important; /* Smanjen padding u tablicama */
+            min-width: 80px;
+          }
+          table {
+            overflow-x: auto;
+            display: block;
           }
           div[style*='marginBottom: 20px'] {
             marginBottom: 15px; /* Smanjen margin za sekcije */
