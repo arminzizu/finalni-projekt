@@ -1,6 +1,11 @@
 node_modules/
 .next/
+out/
 *.log
 .env
 .env.local
 .env.*
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
