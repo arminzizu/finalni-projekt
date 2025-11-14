@@ -166,7 +166,8 @@ export default function DashboardPage() {
         }
       } catch (error: any) {
         // Ignoriraj greške dozvola - koristi localStorage
-        if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+        const errorCode = error?.code || "";
+        if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
           console.warn("Nije moguće učitati iz Firestore-a (možda nema interneta):", error);
         }
         // Ne prikazuj grešku, koristi localStorage

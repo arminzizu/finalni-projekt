@@ -46,7 +46,8 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (error: any) {
           // Ignoriraj greške dozvola - koristi localStorage
-          if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+          const errorCode = error?.code || "";
+          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
             console.warn("Greška pri učitavanju appName iz Firestore-a:", error);
           }
         }
@@ -66,9 +67,10 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
                 }
               }
             },
-            (error) => {
+            (error: any) => {
               // Ignoriraj greške dozvola
-              if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+              const errorCode = error?.code || "";
+              if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
                 console.warn("Greška u onSnapshot za appName:", error);
               }
             }
@@ -77,7 +79,8 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
           return () => unsubscribeSnapshot();
         } catch (error: any) {
           // Ignoriraj greške dozvola
-          if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+          const errorCode = error?.code || "";
+          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
             console.warn("Greška pri postavljanju onSnapshot za appName:", error);
           }
         }
@@ -106,7 +109,8 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
           await setDoc(userDocRef, { appName }, { merge: true });
         } catch (error: any) {
           // Ignoriraj greške dozvola - appName se i dalje koristi lokalno
-          if (error.code !== "permission-denied" && error.code !== "missing-or-insufficient-permissions") {
+          const errorCode = error?.code || "";
+          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
             console.warn("Greška pri spremanju appName u Firestore:", error);
           }
         }

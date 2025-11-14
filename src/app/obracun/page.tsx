@@ -551,7 +551,8 @@ export default function ObracunPage() {
           console.log("Obračun sačuvan u Firestore:", datumString);
         } catch (firestoreError: any) {
           // Ignoriraj greške dozvola - podaci su već sačuvani u localStorage
-          if (firestoreError.code !== "permission-denied" && firestoreError.code !== "missing-or-insufficient-permissions") {
+          const errorCode = firestoreError?.code || "";
+          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
             console.warn("Nije moguće sačuvati u Firestore (možda nema interneta):", firestoreError);
           }
           // Ne blokiraj spremanje ako Firestore ne radi
