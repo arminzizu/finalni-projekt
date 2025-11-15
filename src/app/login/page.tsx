@@ -68,16 +68,8 @@ export default function LoginPage() {
         // Nastavi sa login-om čak i ako IP dohvat ne uspije
       }
 
-      const response = await fetch("/api/set-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Greška pri postavljanju sesije: " + response.statusText);
-      }
-
+      // Session management se rješava automatski kroz Firebase Auth
+      // API route nije potreban za static export
       console.log("Login uspješan, preusmjeravam na dashboard");
       router.push("/dashboard");
     } catch (err: any) {
@@ -158,16 +150,8 @@ export default function LoginPage() {
         // Nastavi sa registracijom čak i ako IP dohvat ne uspije
       }
 
-      const response = await fetch("/api/set-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Greška pri postavljanju sesije: " + response.statusText);
-      }
-
+      // Session management se rješava automatski kroz Firebase Auth
+      // API route nije potreban za static export
       console.log("Registracija uspješna, preusmjeravam na dashboard");
       router.push("/dashboard");
     } catch (err: any) {
@@ -220,19 +204,37 @@ export default function LoginPage() {
       display: "flex", 
       justifyContent: "center", 
       alignItems: "center", 
-      backgroundColor: "#f4f5f7", 
       padding: "20px",
-      boxSizing: "border-box"
+      boxSizing: "border-box",
+      position: "relative",
+      backgroundImage: "url('/background.png')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat"
     }}>
+      {/* Fade overlay */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.4)",
+        zIndex: 1
+      }} />
+      
       <div style={{ 
         padding: "40px", 
-        background: "white", 
+        background: "rgba(255, 255, 255, 0.95)", 
         borderRadius: "12px", 
-        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)", 
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)", 
         textAlign: "center", 
         maxWidth: "450px", 
         width: "100%",
-        margin: "0 auto"
+        margin: "0 auto",
+        position: "relative",
+        zIndex: 2,
+        backdropFilter: "blur(10px)"
       }}>
         <style jsx>{`
           @media (max-width: 768px) {

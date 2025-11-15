@@ -210,6 +210,9 @@ export default function Profile() {
       }
 
       function createSession(ipInfo: { ip: string; location: string; isp: string }) {
+        const user = auth.currentUser;
+        if (!user || !user.email) return; // Ako nema korisnika, ne kreiraj sesiju
+        
         const device = /Mobi|Android/i.test(navigator.userAgent) ? "Mobilni" : "Desktop";
         const currentSession = {
           id: Date.now().toString(),
@@ -335,10 +338,8 @@ export default function Profile() {
     try {
       await signOut(auth);
       console.log("Uspješna odjava, preusmjeravam na login");
-      await fetch("/api/clear-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      // Session se automatski briše kroz Firebase Auth
+      // API route nije potreban za static export
       router.push("/login");
     } catch (err: any) {
       console.error("Greška pri odjavi:", err);

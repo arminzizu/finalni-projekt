@@ -48,6 +48,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   // Ako korisnik nije prijavljen, prikaži samo login stranicu (bez sidebara i layouta)
   if (!isAuthenticated) {
+    // Ako nije na login stranici, preusmjeri na login
+    if (pathname !== "/login") {
+      return (
+        <html lang="bs">
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>{`* { -webkit-tap-highlight-color: transparent; }`}</style>
+          </head>
+          <body style={{ margin: 0, padding: 0, minHeight: "100vh", fontFamily: "'Inter', sans-serif", overflowX: "hidden", WebkitTapHighlightColor: "transparent", display: "flex", justifyContent: "center", alignItems: "center", backgroundColor: "#f4f5f7" }}>
+            <div style={{ fontSize: "16px", color: "#6b7280" }}>Preusmjeravanje na login...</div>
+          </body>
+        </html>
+      );
+    }
+    
     return (
       <html lang="bs">
         <head>
