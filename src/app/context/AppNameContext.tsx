@@ -1,9 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { auth, db } from "../../lib/firebase"; // Ispravljena putanja do lib/firebase.ts (ako je u src/app/lib)
-import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
 
 interface AppNameContextType {
   appName: string;
@@ -13,7 +10,7 @@ interface AppNameContextType {
 const AppNameContext = createContext<AppNameContextType | undefined>(undefined);
 
 export function AppNameProvider({ children }: { children: React.ReactNode }) {
-  // Učitaj iz localStorage prvo, zatim iz Firestore
+  // Učitaj iz localStorage (fallback)
   const [appName, setAppName] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("appName") || "Moja Aplikacija";
@@ -21,103 +18,38 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
     return "Moja Aplikacija";
   });
 
+  // Učitaj iz API-ja pri mount-u
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Prvo učitaj iz localStorage (prioritet)
-        const localAppName = localStorage.getItem("appName");
-        if (localAppName) {
-          setAppName(localAppName);
-        }
-
-        const userDocRef = doc(db, "users", user.uid);
-        
-        // Pokušaj učitati appName iz Firestore-a (opcionalno, kao backup)
-        try {
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            const firestoreAppName = data.appName;
-            // Koristi Firestore samo ako nema u localStorage
-            if (firestoreAppName && !localAppName) {
-              setAppName(firestoreAppName);
-              localStorage.setItem("appName", firestoreAppName);
-            }
-          }
-        } catch (error: any) {
-          // Ignoriraj greške dozvola - koristi localStorage
-          const errorCode = error?.code || "";
-          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-            console.warn("Greška pri učitavanju appName iz Firestore-a:", error);
+    const loadAppName = async () => {
+      try {
+        const resp = await fetch("/api/app-name");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.appName) {
+            setAppName(data.appName);
+            localStorage.setItem("appName", data.appName);
           }
         }
-
-        // Pokušaj postaviti real-time listener (opcionalno)
-        try {
-          const unsubscribeSnapshot = onSnapshot(
-            userDocRef, 
-            (doc) => {
-              if (doc.exists()) {
-                const data = doc.data();
-                const firestoreAppName = data.appName;
-                // Ažuriraj samo ako nema u localStorage ili ako je različito
-                if (firestoreAppName && (!localAppName || firestoreAppName !== localAppName)) {
-                  setAppName(firestoreAppName);
-                  localStorage.setItem("appName", firestoreAppName);
-                }
-              }
-            },
-            (error: any) => {
-              // Ignoriraj greške dozvola
-              const errorCode = error?.code || "";
-              if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-                console.warn("Greška u onSnapshot za appName:", error);
-              }
-            }
-          );
-
-          return () => unsubscribeSnapshot();
-        } catch (error: any) {
-          // Ignoriraj greške dozvola
-          const errorCode = error?.code || "";
-          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-            console.warn("Greška pri postavljanju onSnapshot za appName:", error);
-          }
-        }
-      } else {
-        // Ako korisnik nije prijavljen, učitaj iz localStorage ili default
-        const localAppName = localStorage.getItem("appName");
-        setAppName(localAppName || "Moja Aplikacija");
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  useEffect(() => {
-    // Spremi u localStorage (prioritet)
-    if (appName.trim() !== "" && typeof window !== "undefined") {
-      localStorage.setItem("appName", appName);
-    }
-
-    // Pokušaj spremiti u Firestore (opcionalno, kao backup)
-    const saveAppName = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        try {
-          const userDocRef = doc(db, "users", user.uid);
-          await setDoc(userDocRef, { appName }, { merge: true });
-        } catch (error: any) {
-          // Ignoriraj greške dozvola - appName se i dalje koristi lokalno
-          const errorCode = error?.code || "";
-          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-            console.warn("Greška pri spremanju appName u Firestore:", error);
-          }
-        }
+      } catch (err) {
+        console.warn("Nije moguće učitati appName iz API-ja, koristi localStorage");
       }
     };
-    if (appName.trim() !== "") {
-      saveAppName();
+    loadAppName();
+  }, []);
+
+  // Spremi u localStorage i API
+  useEffect(() => {
+    if (appName.trim() !== "" && typeof window !== "undefined") {
+      localStorage.setItem("appName", appName);
+      
+      // Spremi i na server (async, ne blokira)
+      fetch("/api/app-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appName }),
+      }).catch((err) => {
+        console.warn("Nije moguće spremiti appName na server:", err);
+      });
     }
   }, [appName]);
 

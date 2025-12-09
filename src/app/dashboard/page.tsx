@@ -12,10 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { FaArrowUp, FaArrowDown, FaDollarSign } from "react-icons/fa";
-import { auth, onAuthStateChanged } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
-import { getDocs, collection, onSnapshot } from "firebase/firestore";
-import { db } from "../../lib/firestore";
 import { useCjenovnik } from "../context/CjenovnikContext";
 import { useAppName } from "../context/AppNameContext";
 
@@ -87,6 +84,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const { cjenovnik } = useCjenovnik();
   const { appName } = useAppName();
+  const offlineMode = true; // Firebase uklonjen
+  const offlineUser = typeof window !== "undefined" ? localStorage.getItem("offlineUser") : null;
 
   // Funkcija za učitavanje arhive iz localStorage
   const loadArhiva = useCallback(() => {
@@ -142,41 +141,30 @@ export default function DashboardPage() {
 
   // OPCIONALNO: Pokušaj učitati iz Firestore-a (fallback)
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
-
+    // U server-only modu: pokušaj povući sa API-ja ako localStorage prazan
+    const savedArhiva = typeof window !== "undefined" ? localStorage.getItem("arhivaObracuna") : null;
+    if (savedArhiva) return;
+    (async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "users", user.uid, "obracuni"));
-        const firestorePodaci: ArhiviraniObracun[] = [];
-
-        querySnapshot.forEach((doc) => {
-          firestorePodaci.push(doc.data() as ArhiviraniObracun);
-        });
-
-        // Ako nema podataka u localStorage, koristi Firestore
-        const savedArhiva = localStorage.getItem("arhivaObracuna");
-        if (!savedArhiva && firestorePodaci.length > 0) {
-          firestorePodaci.sort((a, b) => {
-            const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
-            const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
-            return dateA - dateB;
-          });
-          setArhiva(firestorePodaci);
-          console.log("Učitano iz Firestore-a (fallback):", firestorePodaci.length, "obračuna");
+        const resp = await fetch("/api/obracuni");
+        if (resp.ok) {
+          const data: ArhiviraniObracun[] = await resp.json();
+          if (data && data.length) {
+            setArhiva(
+              data.sort((a, b) => {
+                const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+                const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+                return dateA - dateB;
+              })
+            );
+          }
         }
-      } catch (error: any) {
-        // Ignoriraj greške dozvola - koristi localStorage
-        const errorCode = error?.code || "";
-        if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-          console.warn("Nije moguće učitati iz Firestore-a (možda nema interneta):", error);
-        }
-        // Ne prikazuj grešku, koristi localStorage
+      } catch (err) {
+        console.warn("API obracuni nije dostupan, koristi localStorage ako postoji.", err);
+      } finally {
+        setLoading(false);
       }
-    });
-
-    return () => {
-      unsubscribeAuth();
-    };
+    })();
   }, []);
 
   // Priprema podataka za grafikon

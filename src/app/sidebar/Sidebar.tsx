@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { auth } from "../../lib/firebase";
-import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaUser, FaBars } from "react-icons/fa";
+import { FaTachometerAlt, FaCalculator, FaArchive, FaTags, FaDollarSign, FaUser, FaBars, FaUserShield } from "react-icons/fa";
 import { useAppName } from "../context/AppNameContext";
 
 const Sidebar = () => {
@@ -13,13 +12,26 @@ const Sidebar = () => {
   const { appName } = useAppName();
   const [isBottomBarVisible, setIsBottomBarVisible] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // Provjera autentifikacije
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setIsAuthenticated(!!user);
-    });
-    return () => unsubscribe();
+    // LOGIN ISKLJUČEN - uvijek authenticated
+    setIsAuthenticated(true);
+    
+    // Provjeri da li je korisnik admin
+    if (typeof window !== "undefined") {
+      const offlineUser = localStorage.getItem("offlineUser");
+      if (offlineUser) {
+        try {
+          const user = JSON.parse(offlineUser);
+          if (user.email === "gitara.zizu@gmail.com") {
+            setIsAdmin(true);
+          }
+        } catch (e) {
+          console.error("Error parsing offlineUser:", e);
+        }
+      }
+    }
   }, []);
 
   const navLinks = [
@@ -28,7 +40,8 @@ const Sidebar = () => {
     { href: "/arhiva", label: "Arhiva", icon: <FaArchive /> },
     { href: "/cjenovnik", label: "Cjenovnik", icon: <FaTags /> },
     { href: "/profit", label: "Profit", icon: <FaDollarSign /> },
-    { href: "/profile", label: "Profil", icon: <FaUser /> }, // Dodan ispravan link za profil
+    { href: "/profile", label: "Profil", icon: <FaUser /> },
+    ...(isAdmin ? [{ href: "/admin", label: "Admin", icon: <FaUserShield /> }] : []),
   ];
 
   return (
@@ -71,7 +84,7 @@ const Sidebar = () => {
                   fontWeight: 500,
                   transition: "all 0.2s ease",
                   fontSize: "12px",
-                  width: "16%", // Ravnomjerno raspoređeno za 6 linkova
+                  width: isAdmin ? "14%" : "16%", // Prilagođeno za 6 ili 7 linkova
                   textAlign: "center",
                 }}
                 className="sidebar-link"
@@ -118,9 +131,6 @@ const Sidebar = () => {
           }
           .sidebar-link span {
             font-size: 10px; /* Smanji tekst na mobilu */
-          }
-          .sidebar-link {
-            width: "16%"; /* Prilagođeno za 6 elemenata */
           }
           div[onClick] {
             bottom: ${isBottomBarVisible ? "60px" : "10px"}; /* Pomicanje ikone kad je bar sakriven */

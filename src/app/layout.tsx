@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { AppNameProvider } from "./context/AppNameContext";
 import { CjenovnikProvider } from "./context/CjenovnikContext";
 import Sidebar from "./sidebar/Sidebar";
-import { auth } from "../lib/firebase";
 import { usePathname, useRouter } from "next/navigation";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,24 +13,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      const authenticated = !!user;
-      setIsAuthenticated(authenticated);
-      setIsLoading(false);
+    // LOGIN ISKLJUČEN ZA DEVELOPMENT - omogućava pristup bez autentifikacije
+    const offlineUser = typeof window !== "undefined" ? localStorage.getItem("offlineUser") : null;
+    const authenticated = !!offlineUser;
+    
+    // Ako nema usera, kreiraj defaultnog
+    if (!offlineUser && typeof window !== "undefined") {
+      const defaultUser = {
+        email: "gitara.zizu@gmail.com",
+        userId: "admin-user",
+        displayName: "Admin",
+        appName: "Moja Aplikacija",
+        loggedInAt: Date.now(),
+      };
+      localStorage.setItem("offlineUser", JSON.stringify(defaultUser));
+    }
+    
+    setIsAuthenticated(true); // Uvijek authenticated za sada
+    setIsLoading(false);
+  }, []);
 
-      // Ako korisnik nije prijavljen i nije na login stranici, preusmjeri na login
-      if (!authenticated && pathname !== "/login") {
-        router.push("/login");
-      }
-      // Ako je korisnik prijavljen i na login stranici, preusmjeri na dashboard
-      if (authenticated && pathname === "/login") {
-        router.push("/dashboard");
-      }
-    });
-    return () => unsubscribe();
-  }, [pathname, router]);
-
-  // Ako se još učitava autentifikacija, prikaži loading ili ništa
+  // LOGIN ISKLJUČEN - prikaži app direktno
   if (isLoading) {
     return (
       <html lang="bs">
@@ -41,40 +43,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </head>
         <body style={{ margin: 0, padding: 0, minHeight: "100vh", fontFamily: "'Inter', sans-serif", display: "flex", justifyContent: "center", alignItems: "center", backgroundColor: "#f4f5f7", WebkitTapHighlightColor: "transparent" }}>
           <div style={{ fontSize: "16px", color: "#6b7280" }}>Učitavanje...</div>
-        </body>
-      </html>
-    );
-  }
-
-  // Ako korisnik nije prijavljen, prikaži samo login stranicu (bez sidebara i layouta)
-  if (!isAuthenticated) {
-    // Ako nije na login stranici, preusmjeri na login
-    if (pathname !== "/login") {
-      return (
-        <html lang="bs">
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <style>{`* { -webkit-tap-highlight-color: transparent; }`}</style>
-          </head>
-          <body style={{ margin: 0, padding: 0, minHeight: "100vh", fontFamily: "'Inter', sans-serif", overflowX: "hidden", WebkitTapHighlightColor: "transparent", display: "flex", justifyContent: "center", alignItems: "center", backgroundColor: "#f4f5f7" }}>
-            <div style={{ fontSize: "16px", color: "#6b7280" }}>Preusmjeravanje na login...</div>
-          </body>
-        </html>
-      );
-    }
-    
-    return (
-      <html lang="bs">
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-          <style>{`* { -webkit-tap-highlight-color: transparent; }`}</style>
-        </head>
-        <body style={{ margin: 0, padding: 0, minHeight: "100vh", fontFamily: "'Inter', sans-serif", overflowX: "hidden", WebkitTapHighlightColor: "transparent" }}>
-          <AppNameProvider>
-            <CjenovnikProvider>
-              {children}
-            </CjenovnikProvider>
-          </AppNameProvider>
         </body>
       </html>
     );

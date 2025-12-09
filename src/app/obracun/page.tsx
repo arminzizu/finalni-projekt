@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useCjenovnik } from "../context/CjenovnikContext";
-import { auth } from "../../lib/firebase";
-import { db, doc, setDoc, serverTimestamp } from "../../lib/firestore"; // NOVO
 
 // ---- Tipovi ----
 type Artikal = {
@@ -539,24 +537,16 @@ export default function ObracunPage() {
       localStorage.setItem("arhivaObracuna", JSON.stringify(arhiva));
       console.log("Obračun sačuvan u localStorage:", datumString);
 
-      // OPCIONALNO: Pokušaj sačuvati u Firestore (ako postoji korisnik i internet)
-      const user = auth.currentUser;
-      if (user) {
-        try {
-          const docRef = doc(db, "users", user.uid, "obracuni", datumString);
-          await setDoc(docRef, {
-            ...arhiviraniObracun,
-            savedAt: serverTimestamp(),
-          });
-          console.log("Obračun sačuvan u Firestore:", datumString);
-        } catch (firestoreError: any) {
-          // Ignoriraj greške dozvola - podaci su već sačuvani u localStorage
-          const errorCode = firestoreError?.code || "";
-          if (errorCode !== "permission-denied" && !errorCode.includes("permission") && !errorCode.includes("insufficient")) {
-            console.warn("Nije moguće sačuvati u Firestore (možda nema interneta):", firestoreError);
-          }
-          // Ne blokiraj spremanje ako Firestore ne radi
-        }
+      // Spremi i na server (Postgres) preko API-ja
+      try {
+        await fetch("/api/obracuni", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(arhiviraniObracun),
+        });
+        console.log("Obračun sačuvan na serveru:", datumString);
+      } catch (apiErr) {
+        console.warn("Nije moguće sačuvati na server (koristi se localStorage):", apiErr);
       }
 
       // Ažuriranje cjenovnika (početno stanje za sljedeći dan)

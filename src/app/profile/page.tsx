@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { auth, sendPasswordResetEmail, signOut, sendEmailVerification } from "../../lib/firebase";
 import { useAppName } from "../context/AppNameContext";
 import { useRouter } from "next/navigation";
 import jsPDF from "jspdf";
@@ -87,6 +86,15 @@ export default function Profile() {
   const [newEmail, setNewEmail] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
   const router = useRouter();
+  const getOfflineUser = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("offlineUser");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
 
   // Sinhronizuj localAppName sa appName iz contexta
   useEffect(() => {
@@ -150,7 +158,7 @@ export default function Profile() {
       }
     };
 
-    const user = auth.currentUser;
+    const user = getOfflineUser();
     if (user) {
       setEmail(user.email || "N/A"); // Postavi trenutni e-mail
       
@@ -210,7 +218,7 @@ export default function Profile() {
       }
 
       function createSession(ipInfo: { ip: string; location: string; isp: string }) {
-        const user = auth.currentUser;
+        const user = getOfflineUser();
         if (!user || !user.email) return; // Ako nema korisnika, ne kreiraj sesiju
         
         const device = /Mobi|Android/i.test(navigator.userAgent) ? "Mobilni" : "Desktop";
@@ -236,7 +244,7 @@ export default function Profile() {
   }, []);
 
   const handleChangeEmail = async () => {
-    const user = auth.currentUser;
+    const user = getOfflineUser();
     if (!user || !user.email) {
       setEmailMessage("Niste prijavljeni!");
       setTimeout(() => setEmailMessage(""), 5000);
@@ -255,34 +263,21 @@ export default function Profile() {
       return;
     }
 
-    try {
-      // Pošalji verifikacijski link na trenutni email
-      await sendEmailVerification(user);
-      setEmailMessage(`Verifikacijski link je poslan na vaš trenutni e-mail (${user.email}). Molimo provjerite inbox i kliknite na link prije promjene e-mail adrese.`);
-      setNewEmail("");
-      setTimeout(() => setEmailMessage(""), 10000);
-    } catch (err: any) {
-      setEmailMessage("Greška: " + err.message);
-      setTimeout(() => setEmailMessage(""), 5000);
-    }
+    // U server-only modu samo prikaži poruku
+    setEmailMessage("Promjena e-maila nije podržana u ovoj verziji. Kontaktiraj admina.");
+    setTimeout(() => setEmailMessage(""), 5000);
   };
 
   const handleChangePassword = async () => {
-    const user = auth.currentUser;
+    const user = getOfflineUser();
     if (!user || !user.email) {
       setMessage("Niste prijavljeni!");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
 
-    try {
-      await sendPasswordResetEmail(auth, user.email);
-      setMessage(`Link za promjenu lozinke je poslan na vaš e-mail (${user.email}). Provjerite inbox.`);
-      setTimeout(() => setMessage(""), 8000);
-    } catch (err: any) {
-      setMessage("Greška: " + err.message);
-      setTimeout(() => setMessage(""), 5000);
-    }
+    setMessage("Promjena lozinke nije dostupna u ovoj verziji. Kontaktiraj admina.");
+    setTimeout(() => setMessage(""), 5000);
   };
 
   const handleSaveAppName = () => {
@@ -336,10 +331,8 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      console.log("Uspješna odjava, preusmjeravam na login");
-      // Session se automatski briše kroz Firebase Auth
-      // API route nije potreban za static export
+      localStorage.removeItem("offlineUser");
+      console.log("Odjava uspješna, preusmjeravam na login");
       router.push("/login");
     } catch (err: any) {
       console.error("Greška pri odjavi:", err);
@@ -1019,11 +1012,11 @@ export default function Profile() {
             </tr>
             <tr>
               <td style={tdStyle}>Datum registracije:</td>
-              <td style={tdStyle}>{auth.currentUser?.metadata?.creationTime ? new Date(auth.currentUser.metadata.creationTime).toLocaleDateString("bs-BA") : "N/A"}</td>
+              <td style={tdStyle}>N/A</td>
             </tr>
             <tr>
               <td style={tdStyle}>Zadnja prijava:</td>
-              <td style={tdStyle}>{auth.currentUser?.metadata?.lastSignInTime ? new Date(auth.currentUser.metadata.lastSignInTime).toLocaleString("bs-BA") : "N/A"}</td>
+              <td style={tdStyle}>N/A</td>
             </tr>
           </tbody>
         </table>

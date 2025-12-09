@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -13,6 +12,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const router = useRouter();
+  const offlineMode = true; // Firebase uklonjen, koristimo server API
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
@@ -26,63 +26,50 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      console.log("Pokušavam prijavu s e-mailom:", email);
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-      console.log("ID Token generisan:", idToken);
-      console.log("Uspješan login:", user.email);
-
-      // Dohvati IP adresu i lokaciju pri login-u
-      try {
-        const ipResponse = await fetch("https://ip-api.com/json/?fields=status,message,query,country,regionName,city,isp");
-        const ipData = await ipResponse.json();
-        
-        let ipInfo = {
-          ip: "N/A",
-          location: "Nepoznata lokacija",
-          isp: "N/A"
-        };
-        
-        if (ipData.status === "success") {
-          ipInfo = {
-            ip: ipData.query,
-            location: `${ipData.city || ""}, ${ipData.regionName || ""}, ${ipData.country || ""}`.replace(/^,\s*|,\s*$/g, "").trim() || "Nepoznata lokacija",
-            isp: ipData.isp || "N/A"
-          };
-        } else {
-          // Fallback na ipify
-          const fallbackResponse = await fetch("https://api.ipify.org?format=json");
-          const fallbackData = await fallbackResponse.json();
-          ipInfo.ip = fallbackData.ip;
-        }
-        
-        // Spremi IP info u localStorage za kasnije korištenje
-        localStorage.setItem("lastLoginIP", JSON.stringify({
-          ...ipInfo,
-          timestamp: Date.now(),
-          userEmail: user.email
-        }));
-      } catch (ipError) {
-        console.error("Greška pri dohvaćanju IP adrese:", ipError);
-        // Nastavi sa login-om čak i ako IP dohvat ne uspije
+      // Server-only login preko API-ja (bez Firebase)
+      console.log("Pokušavam login:", { email, password: password ? "***" : "empty" });
+      const resp = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      console.log("Login response status:", resp.status);
+      
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        console.error("Login failed:", data);
+        throw new Error(data.error || "Prijava nije uspjela");
       }
-
-      // Session management se rješava automatski kroz Firebase Auth
-      // API route nije potreban za static export
-      console.log("Login uspješan, preusmjeravam na dashboard");
-      router.push("/dashboard");
+      
+      const data = await resp.json();
+      console.log("Login success:", data);
+      
+      const userData = {
+        email: data.email || email,
+        loggedInAt: Date.now(),
+        userId: data.userId,
+        displayName: data.displayName,
+        appName: data.appName,
+      };
+      
+      localStorage.setItem("offlineUser", JSON.stringify(userData));
+      console.log("User saved to localStorage:", userData);
+      
+      // Provjeri da li je spremljeno
+      const saved = localStorage.getItem("offlineUser");
+      console.log("Verification - saved user:", saved);
+      
+      // Emituj event da layout zna da je korisnik prijavljen
+      window.dispatchEvent(new Event("userLoggedIn"));
+      
+      // Mala pauza prije preusmjeravanja
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 100);
     } catch (err: any) {
       console.error("Greška pri e-mail prijavi:", err);
-      if (err.code === "auth/user-not-found") {
-        setError("Korisnik s ovim e-mailom ne postoji. Registriraj se.");
-      } else if (err.code === "auth/wrong-password") {
-        setError("Pogrešna lozinka. Pokušaj ponovo.");
-      } else if (err.code === "auth/too-many-requests") {
-        setError("Previše pokušaja. Pokušaj ponovo kasnije.");
-      } else {
-        setError(err.message || "Greška pri prijavi. Provjeri e-mail i lozinku.");
-      }
+      setError(err.message || "Greška pri prijavi. Provjeri e-mail i lozinku.");
     } finally {
       setLoading(false);
     }
@@ -108,84 +95,22 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      console.log("Pokušavam registraciju s e-mailom:", email);
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-      console.log("ID Token generisan:", idToken);
-      console.log("Uspješna registracija:", user.email);
-
-      // Dohvati IP adresu i lokaciju pri registraciji
-      try {
-        const ipResponse = await fetch("https://ip-api.com/json/?fields=status,message,query,country,regionName,city,isp");
-        const ipData = await ipResponse.json();
-        
-        let ipInfo = {
-          ip: "N/A",
-          location: "Nepoznata lokacija",
-          isp: "N/A"
-        };
-        
-        if (ipData.status === "success") {
-          ipInfo = {
-            ip: ipData.query,
-            location: `${ipData.city || ""}, ${ipData.regionName || ""}, ${ipData.country || ""}`.replace(/^,\s*|,\s*$/g, "").trim() || "Nepoznata lokacija",
-            isp: ipData.isp || "N/A"
-          };
-        } else {
-          // Fallback na ipify
-          const fallbackResponse = await fetch("https://api.ipify.org?format=json");
-          const fallbackData = await fallbackResponse.json();
-          ipInfo.ip = fallbackData.ip;
-        }
-        
-        // Spremi IP info u localStorage za kasnije korištenje
-        localStorage.setItem("lastLoginIP", JSON.stringify({
-          ...ipInfo,
-          timestamp: Date.now(),
-          userEmail: user.email
-        }));
-      } catch (ipError) {
-        console.error("Greška pri dohvaćanju IP adrese:", ipError);
-        // Nastavi sa registracijom čak i ako IP dohvat ne uspije
-      }
-
-      // Session management se rješava automatski kroz Firebase Auth
-      // API route nije potreban za static export
-      console.log("Registracija uspješna, preusmjeravam na dashboard");
+      // Server-only registracija: spremi lokalno
+      localStorage.setItem(
+        "offlineUser",
+        JSON.stringify({ email, registeredAt: Date.now(), loggedInAt: Date.now() })
+      );
       router.push("/dashboard");
     } catch (err: any) {
       console.error("Greška pri registraciji:", err);
-      if (err.code === "auth/email-already-in-use") {
-        setError("Ovaj e-mail je već registriran. Pokušaj se prijaviti.");
-      } else {
-        setError(err.message || "Greška pri registraciji. Pokušaj ponovo.");
-      }
+      setError(err.message || "Greška pri registraciji. Pokušaj ponovo.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
-      setError("Unesi e-mail za reset lozinke");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Unesi valjanu e-mail adresu");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage("Link za reset lozinke poslan na vaš e-mail!");
-    } catch (err: any) {
-      console.error("Greška pri resetu lozinke:", err);
-      setError(err.message || "Greška pri slanju linka za reset. Pokušaj ponovo.");
-    } finally {
-      setLoading(false);
-    }
+    setError("Reset lozinke nije dostupan u server-only modu. Kontaktiraj admina.");
   };
 
   const handleBack = () => {

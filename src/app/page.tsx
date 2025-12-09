@@ -7,7 +7,8 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push("/login");
+    // LOGIN ISKLJUČEN - idi direktno na dashboard
+    router.push("/dashboard");
   }, [router]);
 
   return (
