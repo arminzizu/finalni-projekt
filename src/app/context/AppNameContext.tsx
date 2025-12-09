@@ -21,15 +21,15 @@ export function AppNameProvider({ children }: { children: React.ReactNode }) {
   // Učitaj iz API-ja pri mount-u
   useEffect(() => {
     const loadAppName = async () => {
-      try {
+        try {
         const resp = await fetch("/api/app-name");
         if (resp.ok) {
           const data = await resp.json();
           if (data.appName) {
             setAppName(data.appName);
             localStorage.setItem("appName", data.appName);
-          }
-        }
+                }
+              }
       } catch (err) {
         console.warn("Nije moguće učitati appName iz API-ja, koristi localStorage");
       }

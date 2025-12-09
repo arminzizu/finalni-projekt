@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // LOGIN ISKLJUČEN ZA DEVELOPMENT - omogućava pristup bez autentifikacije
     const offlineUser = typeof window !== "undefined" ? localStorage.getItem("offlineUser") : null;
     const authenticated = !!offlineUser;
-    
+
     // Ako nema usera, kreiraj defaultnog
     if (!offlineUser && typeof window !== "undefined") {
       const defaultUser = {

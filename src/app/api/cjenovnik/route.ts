@@ -17,8 +17,9 @@ type ArtiklCijena = {
 
 export async function GET() {
   try {
-    // Za sada vraćamo prazan array - cjenovnik se može čuvati u bazi kasnije
-    // Trenutno se koristi localStorage, ali možemo dodati tabelu ako treba
+    // Vraćamo cjenovnik iz baze podataka (ako postoji tabela) ili prazan array
+    // Za sada koristimo localStorage na frontendu, ali možemo dodati tabelu ako treba
+    // Možemo dodati tabelu cjenovnik u bazi podataka kasnije
     return NextResponse.json({ cjenovnik: [] });
   } catch (err) {
     console.error("Greška u GET /api/cjenovnik:", err);

@@ -152,9 +152,9 @@ export default function DashboardPage() {
           if (data && data.length) {
             setArhiva(
               data.sort((a, b) => {
-                const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
-                const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
-                return dateA - dateB;
+            const dateA = new Date(a.datum.split(".").reverse().join("-")).getTime();
+            const dateB = new Date(b.datum.split(".").reverse().join("-")).getTime();
+            return dateA - dateB;
               })
             );
           }

@@ -75,10 +75,40 @@ export function CjenovnikProvider({ children }: { children: ReactNode }) {
   });
   const [pendingCjenovnik, setPendingCjenovnik] = useState<ArtiklCijena[]>([]); // Privremeni cjenovnik
 
-  // Spremi cjenovnik u localStorage svaki put kad se promijeni
+  // Učitaj cjenovnik iz API-ja pri učitavanju
+  useEffect(() => {
+    const loadCjenovnik = async () => {
+      try {
+        const response = await fetch("/api/cjenovnik");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.cjenovnik && data.cjenovnik.length > 0) {
+            setCjenovnik(data.cjenovnik);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("cjenovnik", JSON.stringify(data.cjenovnik));
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Greška pri učitavanju cjenovnika iz API-ja, koristi localStorage:", error);
+      }
+    };
+    loadCjenovnik();
+  }, []);
+
+  // Spremi cjenovnik u localStorage i API svaki put kad se promijeni
   useEffect(() => {
     if (typeof window !== "undefined") {
       localStorage.setItem("cjenovnik", JSON.stringify(cjenovnik));
+      
+      // Spremi u API
+      fetch("/api/cjenovnik", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cjenovnik }),
+      }).catch((error) => {
+        console.warn("Greška pri spremanju cjenovnika u API:", error);
+      });
     }
   }, [cjenovnik]);
 

@@ -65,11 +65,11 @@ export default function LoginPage() {
       
       // Mala pauza prije preusmjeravanja
       setTimeout(() => {
-        router.push("/dashboard");
+      router.push("/dashboard");
       }, 100);
     } catch (err: any) {
       console.error("Greška pri e-mail prijavi:", err);
-      setError(err.message || "Greška pri prijavi. Provjeri e-mail i lozinku.");
+        setError(err.message || "Greška pri prijavi. Provjeri e-mail i lozinku.");
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err: any) {
       console.error("Greška pri registraciji:", err);
-      setError(err.message || "Greška pri registraciji. Pokušaj ponovo.");
+        setError(err.message || "Greška pri registraciji. Pokušaj ponovo.");
     } finally {
       setLoading(false);
     }
